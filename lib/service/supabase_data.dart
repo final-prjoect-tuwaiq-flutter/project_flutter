@@ -21,7 +21,7 @@ class SupabaseData {
   // دالة لجلب الفعاليات بناءً على رقم التصنيف (s_category)
   Future<List<Event>> getEventsByCategory(int categoryId) async {
     final response = await supabase
-        .from('events2')
+        .from('events3')
         .select()
         .eq('m_category', categoryId); // فلترة الفعاليات لتطابق التصنيف
         

@@ -19,6 +19,7 @@ class Event {
   final String? sCategory;
   final double? lat;
   final double? lng;
+  final String? mCategory;
 
   String? get latLng => lat != null && lng != null ? '$lat,$lng' : null;
 
@@ -80,6 +81,7 @@ class Event {
   }
 
   Event({
+    //title fulldescription priceMin priceMax isFree  isregistrationRequired ticketUrl sCategory
     required this.id,
     this.title,
     this.shortDescription,
@@ -98,6 +100,7 @@ class Event {
     this.sCategory,
     this.lat,
     this.lng,
+    this.mCategory,
   });
 
   factory Event.fromJson(Map<dynamic, dynamic> json) {
@@ -186,6 +189,7 @@ class Event {
       's_category': sCategory,
       'lat': lat,
       'lng': lng,
+      'm_category': mCategory,
     };
   }
 }
