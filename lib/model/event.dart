@@ -20,6 +20,7 @@ class Event {
   final double? lat;
   final double? lng;
   final String? mCategory;
+   String? url;
 
   String? get latLng => lat != null && lng != null ? '$lat,$lng' : null;
 
@@ -101,6 +102,7 @@ class Event {
     this.lat,
     this.lng,
     this.mCategory,
+    this.url,
   });
 
   factory Event.fromJson(Map<dynamic, dynamic> json) {
@@ -127,6 +129,8 @@ class Event {
       sCategory: json['s_category']?.toString(),
       lat: (json['lat'] as num?)?.toDouble(),
       lng: (json['lng'] as num?)?.toDouble(),
+      mCategory: json['m_category']?.toString(),
+      url: "https://www.google.com/maps/place/${json['lat']},${json['lng']}",
     );
   }
 
