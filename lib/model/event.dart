@@ -22,6 +22,7 @@ class Event {
   final double? lat;
   final double? lng;
   final String? mCategory;
+   String? url;
 
   String? get latLng => lat != null && lng != null ? '$lat,$lng' : null;
 
@@ -65,6 +66,7 @@ class Event {
     this.lat,
     this.lng,
     this.mCategory,
+    this.url,
   });
 
   factory Event.fromJson(Map<dynamic, dynamic> json) {
@@ -90,8 +92,48 @@ class Event {
       lat: (json['lat'] as num?)?.toDouble(),
       lng: (json['lng'] as num?)?.toDouble(),
       mCategory: json['m_category']?.toString(),
+      url: "https://www.google.com/maps/place/${json['lat']},${json['lng']}",
     );
   }
+
+  static Map<dynamic, dynamic>? _parseTimes(dynamic value) {
+    if (value == null) return null;
+    if (value is String) {
+      final text = value.trim();
+      if (text.isEmpty) return null;
+
+      try {
+        final cleaned = text.replaceAll(RegExp(r',\s*}'), '}');
+        final decoded = jsonDecode(cleaned);
+        if (decoded is Map) return _parseTimes(decoded);
+      } on FormatException {
+        // Store non-JSON text as one shared time range.
+      }
+
+      return {'times': text};
+    }
+    if (value is Map) {
+      return value.map(
+        (key, time) => MapEntry(key.toString(), time.toString()),
+      );
+    }
+    return null;
+  }
+
+  static List<dynamic>? _parseClosedDays(dynamic value) {
+    if (value == null) return null;
+    if (value is List) return List<dynamic>.from(value);
+    if (value is String) {
+      final text = value.trim();
+      if (text.isEmpty) return null;
+      try {
+        final decoded = jsonDecode(text);
+        if (decoded is List) return List<dynamic>.from(decoded);
+      } catch (_) {}
+    }
+    return null;
+  }
+
 
   Map<String, dynamic> toJson() {
     return {
