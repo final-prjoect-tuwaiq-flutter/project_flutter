@@ -7,9 +7,11 @@ class Event {
   final String? fullDescription;
   final String? coverImageUrl;
   final String? thumbnailUrl;
-  final bool? sameTimes;
-  final Map<dynamic, dynamic>? times;
-  final List<dynamic>? closedDays;
+  
+  // الحقول الفعلية في Supabase
+  final String? startAt; 
+  final String? endAt;
+  
   final bool? isFree;
   final double? priceMin;
   final double? priceMax;
@@ -24,74 +26,36 @@ class Event {
 
   String? get latLng => lat != null && lng != null ? '$lat,$lng' : null;
 
-  static const Map<String, String> _dayNamesArabic = {
-    'sun': 'الأحد',
-    'mon': 'الإثنين',
-    'tue': 'الثلاثاء',
-    'wed': 'الأربعاء',
-    'thu': 'الخميس',
-    'fri': 'الجمعة',
-    'sat': 'السبت',
-  };
-
-  static String _formatTimeRangeArabic(String timeRange) {
-    // Format "10:00-15:00" or "08:00 - 21:00" into Arabic format "من 10:00 إلى 15:00"
-    final parts = timeRange.split('-');
-    if (parts.length == 2) {
-      final start = parts[0].trim();
-      final end = parts[1].trim();
-      if (start.isNotEmpty && end.isNotEmpty) {
-        return 'من $start إلى $end';
-      }
+  // دالة لتنظيف الوقت وإزالة الثواني (تحويل 10:00:00 إلى 10:00)
+  static String _formatTime(String timeStr) {
+    List<String> parts = timeStr.split(':');
+    if (parts.length >= 2) {
+      return '${parts[0]}:${parts[1]}';
     }
-    return timeRange;
+    return timeStr;
   }
 
+  // الجيتر الذي ستستخدمه الشاشة لعرض الوقت
   String? get formattedTimesArabic {
-    if (times == null || times!.isEmpty) return null;
-
-    // Case 1: Same time for all days (same_times: true or key is 'times')
-    if (times!.containsKey('times')) {
-      final timeStr = times!['times'].toString().trim();
-      return _formatTimeRangeArabic(timeStr);
+    if (startAt != null && endAt != null) {
+      return 'من ${_formatTime(startAt!)} إلى ${_formatTime(endAt!)}';
+    } else if (startAt != null) {
+      return 'يبدأ من ${_formatTime(startAt!)}';
+    } else if (endAt != null) {
+      return 'ينتهي في ${_formatTime(endAt!)}';
     }
-
-    // Case 2: Schedule per day
-    final List<String> schedule = [];
-    final dayOrder = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
-    for (final dayKey in dayOrder) {
-      if (times!.containsKey(dayKey)) {
-        final arDay = _dayNamesArabic[dayKey] ?? dayKey;
-        final timeStr = times![dayKey].toString().trim();
-        final formattedRange = _formatTimeRangeArabic(timeStr);
-        schedule.add('$arDay: $formattedRange');
-      }
-    }
-
-    // Also include any other days not in dayOrder if any
-    for (final entry in times!.entries) {
-      final key = entry.key.toString().toLowerCase();
-      if (!dayOrder.contains(key) && key != 'times') {
-        final arDay = _dayNamesArabic[key] ?? entry.key.toString();
-        final formattedRange = _formatTimeRangeArabic(entry.value.toString().trim());
-        schedule.add('$arDay: $formattedRange');
-      }
-    }
-
-    return schedule.isNotEmpty ? schedule.join('\n') : null;
+    return null;
   }
 
   Event({
-    //title fulldescription priceMin priceMax isFree  isregistrationRequired ticketUrl sCategory
     required this.id,
     this.title,
     this.shortDescription,
     this.fullDescription,
     this.coverImageUrl,
     this.thumbnailUrl,
-    this.sameTimes,
-    this.times,
-    this.closedDays,
+    this.startAt,
+    this.endAt,
     this.isFree,
     this.priceMin,
     this.priceMax,
@@ -113,16 +77,14 @@ class Event {
       fullDescription: json['full_description'] as String?,
       coverImageUrl: json['cover_image_url'] as String?,
       thumbnailUrl: json['thumbnail_url'] as String?,
-      sameTimes: json['same_time'] as bool?,
-      times: _parseTimes(json['times']),
-      closedDays: _parseClosedDays(json['closed_days']),
+      
+      // قراءة الحقول الصحيحة الموجودة في قاعدة البيانات
+      startAt: json['start_at']?.toString(),
+      endAt: json['end_at']?.toString(),
+      
       isFree: json['is_free'] as bool?,
-      priceMin: json['price_min'] != null
-          ? (json['price_min'] as num).toDouble()
-          : null,
-      priceMax: json['price_max'] != null
-          ? (json['price_max'] as num).toDouble()
-          : null,
+      priceMin: json['price_min'] != null ? (json['price_min'] as num).toDouble() : null,
+      priceMax: json['price_max'] != null ? (json['price_max'] as num).toDouble() : null,
       isRegistrationRequired: json['is_registration_required'] as bool?,
       temp: json['temp'] as bool?,
       ticketUrl: json['ticket_url'] as String?,
@@ -181,9 +143,8 @@ class Event {
       'full_description': fullDescription,
       'cover_image_url': coverImageUrl,
       'thumbnail_url': thumbnailUrl,
-      'same_time': sameTimes,
-      'times': times,
-      'closed_days': closedDays,
+      'start_at': startAt,
+      'end_at': endAt,
       'is_free': isFree,
       'price_min': priceMin,
       'price_max': priceMax,
