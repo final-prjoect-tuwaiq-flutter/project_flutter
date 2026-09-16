@@ -1,72 +1,65 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-// ==========================================
-// 1. Theme Extension (ألوان حالات الفعاليات: مجاني، مدفوع، الخ)
-// ==========================================
-class AppStatusColors extends ThemeExtension<AppStatusColors> {
-  final Color freeColor;
-  final Color freeColorBg;
-  final Color priceColor;
-  final Color priceColorBg;
-  final Color neutralBadgeColor;
-  final Color neutralBadgeColorBg;
+class AppCustomColors extends ThemeExtension<AppCustomColors> {
+  final Color accentColor;
+  final Color accentColorSoft;
+  final Color solidDarkOrange; // البرتقالي الداكن المخصص للباج
+  final Color glassBackgroundDark;
+  final Color glassBackgroundLight;
+  final Color darkGlassStrong; // الدرجة الداكنة الموحدة للحاويات
 
-  const AppStatusColors({
-    required this.freeColor,
-    required this.freeColorBg,
-    required this.priceColor,
-    required this.priceColorBg,
-    required this.neutralBadgeColor,
-    required this.neutralBadgeColorBg,
+  const AppCustomColors({
+    required this.accentColor,
+    required this.accentColorSoft,
+    required this.solidDarkOrange,
+    required this.glassBackgroundDark,
+    required this.glassBackgroundLight,
+    required this.darkGlassStrong,
   });
 
   @override
-  AppStatusColors copyWith({
-    Color? freeColor, Color? freeColorBg,
-    Color? priceColor, Color? priceColorBg,
-    Color? neutralBadgeColor, Color? neutralBadgeColorBg,
+  AppCustomColors copyWith({
+    Color? accentColor, Color? accentColorSoft, Color? solidDarkOrange,
+    Color? glassBackgroundDark, Color? glassBackgroundLight, Color? darkGlassStrong,
   }) {
-    return AppStatusColors(
-      freeColor: freeColor ?? this.freeColor,
-      freeColorBg: freeColorBg ?? this.freeColorBg,
-      priceColor: priceColor ?? this.priceColor,
-      priceColorBg: priceColorBg ?? this.priceColorBg,
-      neutralBadgeColor: neutralBadgeColor ?? this.neutralBadgeColor,
-      neutralBadgeColorBg: neutralBadgeColorBg ?? this.neutralBadgeColorBg,
+    return AppCustomColors(
+      accentColor: accentColor ?? this.accentColor,
+      accentColorSoft: accentColorSoft ?? this.accentColorSoft,
+      solidDarkOrange: solidDarkOrange ?? this.solidDarkOrange,
+      glassBackgroundDark: glassBackgroundDark ?? this.glassBackgroundDark,
+      glassBackgroundLight: glassBackgroundLight ?? this.glassBackgroundLight,
+      darkGlassStrong: darkGlassStrong ?? this.darkGlassStrong,
     );
   }
 
   @override
-  AppStatusColors lerp(ThemeExtension<AppStatusColors>? other, double t) {
-    if (other is! AppStatusColors) return this;
-    return AppStatusColors(
-      freeColor: Color.lerp(freeColor, other.freeColor, t)!,
-      freeColorBg: Color.lerp(freeColorBg, other.freeColorBg, t)!,
-      priceColor: Color.lerp(priceColor, other.priceColor, t)!,
-      priceColorBg: Color.lerp(priceColorBg, other.priceColorBg, t)!,
-      neutralBadgeColor: Color.lerp(neutralBadgeColor, other.neutralBadgeColor, t)!,
-      neutralBadgeColorBg: Color.lerp(neutralBadgeColorBg, other.neutralBadgeColorBg, t)!,
+  AppCustomColors lerp(ThemeExtension<AppCustomColors>? other, double t) {
+    if (other is! AppCustomColors) return this;
+    return AppCustomColors(
+      accentColor: Color.lerp(accentColor, other.accentColor, t)!,
+      accentColorSoft: Color.lerp(accentColorSoft, other.accentColorSoft, t)!,
+      solidDarkOrange: Color.lerp(solidDarkOrange, other.solidDarkOrange, t)!,
+      glassBackgroundDark: Color.lerp(glassBackgroundDark, other.glassBackgroundDark, t)!,
+      glassBackgroundLight: Color.lerp(glassBackgroundLight, other.glassBackgroundLight, t)!,
+      darkGlassStrong: Color.lerp(darkGlassStrong, other.darkGlassStrong, t)!,
     );
   }
 }
 
-// ==========================================
-// 2. الهوية البصرية الأساسية (AppTheme)
-// ==========================================
 class AppTheme {
-  static const Color primaryColor = Color(0xFF5E35B1); // بنفسجي داكن
-  static const Color secondaryColor = Color(0xFFFF4081); // وردي زاهي
-  static const Color backgroundColor = Color(0xFFF8F9FA); // خلفية التطبيق رمادي فاتح
-  static const Color surfaceColor = Color(0xFFFFFFFF); // البطاقات بيضاء
-  static const Color errorColor = Color(0xFFB3261E); // أحمر للأخطاء
+  static const Color accentOrange = Color(0xFFFF7A3D); 
+  static const Color accentOrangeSoft = Color(0x26FF7A3D); 
   
-  static const Color textMainColor = Color(0xFF1D1D1D); // نصوص رئيسية
-  static const Color textSecondaryColor = Color(0xFF757575); // نصوص فرعية
+  static const Color baseBlack = Color(0xFF191D21); 
+  static const Color backgroundColor = Color(0xFFF8F9FA); 
+  static const Color surfaceColor = Color(0xFFFFFFFF); 
+  
+  static const Color textMainColor = Color(0xFF1D1D1D); 
+  static const Color textSecondaryColor = Color(0xFF757575); 
 
-  // ستايل زر أسود كبديل في حال أردت زر الحجز أسود
   static ButtonStyle get blackCtaButtonStyle => ElevatedButton.styleFrom(
-        backgroundColor: const Color(0xFF191D21), 
+        backgroundColor: baseBlack, 
         foregroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         elevation: 0,
@@ -81,25 +74,23 @@ class AppTheme {
       scaffoldBackgroundColor: backgroundColor,
       
       colorScheme: const ColorScheme.light(
-        primary: primaryColor,
+        primary: baseBlack, 
         onPrimary: Colors.white,
-        secondary: secondaryColor,
+        secondary: accentOrange, 
         onSecondary: Colors.white,
         surface: surfaceColor,
         onSurface: textMainColor,
-        error: errorColor,
-        onError: Colors.white,
-        surfaceTint: Colors.transparent, 
+        error: Color(0xFFB3261E),
       ),
 
       extensions: <ThemeExtension<dynamic>>[
-        AppStatusColors(
-          freeColor: const Color(0xFF2E7D32), 
-          freeColorBg: const Color(0xFF2E7D32).withOpacity(0.12),
-          priceColor: const Color(0xFFD84315), 
-          priceColorBg: const Color(0xFFD84315).withOpacity(0.12),
-          neutralBadgeColor: Colors.black87,
-          neutralBadgeColorBg: Colors.black.withOpacity(0.04),
+        AppCustomColors(
+          accentColor: accentOrange,
+          accentColorSoft: accentOrangeSoft,
+          solidDarkOrange: const Color(0xFFE65C00), // برتقالي داكن صلب
+          glassBackgroundDark: Colors.black.withOpacity(0.35),
+          glassBackgroundLight: Colors.white.withOpacity(0.15),
+          darkGlassStrong: Colors.black.withOpacity(0.45), // درجة غامقة موحدة
         ),
       ],
 
@@ -109,48 +100,17 @@ class AppTheme {
         titleMedium: baseTextTheme.titleMedium?.copyWith(color: textMainColor, fontWeight: FontWeight.w600),
         bodyMedium: baseTextTheme.bodyMedium?.copyWith(color: textSecondaryColor, fontWeight: FontWeight.w500),
         bodySmall: baseTextTheme.bodySmall?.copyWith(color: textSecondaryColor, fontWeight: FontWeight.w400),
-        labelSmall: baseTextTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600),
       ),
 
-             // أضفنا كلمة Data ليصبح CardThemeData
       cardTheme: CardThemeData(
         color: surfaceColor,
-        elevation: 1,
+        elevation: 1.0,
         shadowColor: const Color(0x14000000), 
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         clipBehavior: Clip.antiAlias,
         margin: EdgeInsets.zero,
       ),
-
-      elevatedButtonTheme: ElevatedButtonThemeData(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: primaryColor,
-          foregroundColor: Colors.white,
-          elevation: 0,
-          shape: const StadiumBorder(),
-          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
-        ),
-      ),
-
-      inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: const Color(0xFFF1F1F3),
-        hintStyle: const TextStyle(color: Colors.grey),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: const BorderSide(color: primaryColor, width: 1.5)),
-        errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: const BorderSide(color: errorColor, width: 1.5)),
-      ),
-
-      snackBarTheme: SnackBarThemeData(
-        backgroundColor: textMainColor,
-        contentTextStyle: const TextStyle(color: Colors.white),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-      
-      dividerTheme: DividerThemeData(color: Colors.grey.withOpacity(0.2), thickness: 1, space: 24),
+      elevatedButtonTheme: ElevatedButtonThemeData(style: blackCtaButtonStyle),
     );
   }
 }

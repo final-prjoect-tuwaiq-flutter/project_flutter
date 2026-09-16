@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:project_flutter/pages/event_details.dart';
 import 'package:project_flutter/theme/theme.dart';
 import 'package:project_flutter/widget/status_badge.dart';
+import 'package:project_flutter/widgets/glass_container.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:project_flutter/model/catagory_model.dart';
 import 'package:project_flutter/model/event.dart';
@@ -497,10 +498,7 @@ class CategoriesHeaderContainer extends StatelessWidget {
   final ValueChanged<Category> onCategorySelected;
 
   const CategoriesHeaderContainer({
-    super.key,
-    required this.categories,
-    required this.selectedCategoryId,
-    required this.onCategorySelected,
+    super.key, required this.categories, required this.selectedCategoryId, required this.onCategorySelected,
   });
 
   IconData _getIconForCategory(String name) {
@@ -508,18 +506,20 @@ class CategoriesHeaderContainer extends StatelessWidget {
     if (name.contains('ترفيه')) return Icons.local_activity_rounded;
     if (name.contains('رياض')) return Icons.sports_soccer_rounded;
     if (name.contains('مؤتمر')) return Icons.business_center_rounded;
-    if (name.contains('تخييم') || name.contains('طبيع'))
-      return Icons.landscape_rounded;
+    if (name.contains('تخييم') || name.contains('طبيع')) return Icons.landscape_rounded;
     return Icons.category_rounded;
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final customColors = theme.extension<AppCustomColors>()!;
+    
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.08),
+        color: customColors.solidDarkOrange.withOpacity(0.9), // الحاوية الأساسية رمادي داكن
         borderRadius: BorderRadius.circular(24),
       ),
       child: Wrap(
@@ -534,27 +534,21 @@ class CategoriesHeaderContainer extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 250),
+                Container(
                   width: 58,
                   height: 58,
                   decoration: BoxDecoration(
-                    color: isSelected ? const Color(0xFFFF4B6E) : Colors.white,
+                    // الخلفية برتقالية صلبة إذا كان محدداً، وبدون لون إذا لم يكن
+                    color: isSelected ? customColors.accentColor : Colors.transparent,
                     shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(
-                          isSelected ? 0.2 : 0.05,
-                        ),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
                   ),
-                  child: Icon(
-                    _getIconForCategory(category.name),
-                    color: isSelected ? Colors.white : Colors.black87,
-                    size: 26,
+                  child: Center(
+                    child: Icon(
+                      _getIconForCategory(category.name),
+                      // الأيقونة سوداء إذا كان محدداً، وإلا بيضاء شفافة
+                      color: isSelected ? Colors.white : Colors.white70, 
+                      size: 26,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -563,9 +557,8 @@ class CategoriesHeaderContainer extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                    color: isSelected
-                        ? const Color(0xFFFF4B6E)
-                        : Colors.black87,
+                    // النص أسود إذا كان محدداً، وإلا أبيض شفاف
+                    color: isSelected ? Colors.white : Colors.white70,
                   ),
                 ),
               ],
@@ -576,7 +569,6 @@ class CategoriesHeaderContainer extends StatelessWidget {
     );
   }
 }
-
 // ==========================================
 // كرت الفعالية (محدث - يستقبل distanceText)
 // ==========================================
@@ -593,9 +585,9 @@ class EventCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final bool isFree = event.isFree ?? false;
     final theme = Theme.of(context);
-    final statusColors = theme.extension<AppStatusColors>()!;
+    final customColors = theme.extension<AppCustomColors>()!;
 
-    return Card( // تم استخدام Card المجهز في الثيم
+    return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Padding(
         padding: const EdgeInsets.all(12.0),
@@ -650,18 +642,17 @@ class EventCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     if (!isFree) ...[
-                      Text('من', style: theme.textTheme.bodySmall),
-                      const SizedBox(height: 2),
+                      // النص هنا "مدفوع" فقط وبدون سعر
                       StatusBadge(
-                        text: '${event.priceMin?.toStringAsFixed(0) ?? 0} ر.س',
-                        backgroundColor: statusColors.priceColorBg,
-                        textColor: statusColors.priceColor,
+                        text: 'مدفوع',
+                        backgroundColor: customColors.accentColorSoft,
+                        textColor: customColors.accentColor,
                       ),
                     ] else ...[
                       StatusBadge(
                         text: 'مجاني',
-                        backgroundColor: statusColors.freeColorBg,
-                        textColor: statusColors.freeColor,
+                        backgroundColor: customColors.accentColorSoft,
+                        textColor: customColors.accentColor,
                       ),
                     ],
                   ],
@@ -672,7 +663,8 @@ class EventCard extends StatelessWidget {
                   child: Container(
                     width: 44,
                     height: 44,
-                    decoration: BoxDecoration(color: theme.colorScheme.primary, shape: BoxShape.circle),
+                    // الزر الأسود يعبر عن العمل الرئيسي
+                    decoration: BoxDecoration(color: customColors.accentColor, shape: BoxShape.circle),
                     child: Icon(Icons.arrow_forward_rounded, color: theme.colorScheme.onPrimary, size: 20),
                   ),
                 ),
@@ -701,30 +693,25 @@ class FloatingBottomNavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(left: 40, right: 40, bottom: 24),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(35),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          _buildNavItem(0, Icons.home_rounded, 'الرئيسية'),
-          _buildNavItem(1, Icons.person_rounded, 'حسابي'),
-        ],
+      // استخدمنا GlassContainer هنا
+      child: GlassContainer(
+        borderRadius: 35.0,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            _buildNavItem(context, 0, Icons.home_rounded, 'الرئيسية'),
+            _buildNavItem(context, 1, Icons.person_rounded, 'حسابي'),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildNavItem(int index, IconData icon, String label) {
+  Widget _buildNavItem(BuildContext context, int index, IconData icon, String label) {
     final isSelected = currentIndex == index;
+    final theme = Theme.of(context);
+    final customColors = theme.extension<AppCustomColors>()!;
 
     return GestureDetector(
       onTap: () => onTap(index),
@@ -733,7 +720,8 @@ class FloatingBottomNavBar extends StatelessWidget {
         duration: const Duration(milliseconds: 250),
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFFF4B6E) : Colors.transparent,
+          // خلفية خفيفة برتقالية عند التحديد
+          color: isSelected ? customColors.accentColorSoft : Colors.transparent,
           borderRadius: BorderRadius.circular(30),
         ),
         child: Row(
@@ -741,15 +729,16 @@ class FloatingBottomNavBar extends StatelessWidget {
           children: [
             Icon(
               icon,
-              color: isSelected ? Colors.white : Colors.black54,
+              // لون برتقالي عند الاختيار، وإلا أبيض شفاف للزجاج
+              color: isSelected ? customColors.accentColor : Colors.white70,
               size: 24,
             ),
             if (isSelected) ...[
               const SizedBox(width: 8),
               Text(
                 label,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: customColors.accentColor,
                   fontWeight: FontWeight.bold,
                   fontSize: 14,
                 ),
