@@ -1,19 +1,19 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:project_flutter/model/catagory_model.dart';
 import 'package:project_flutter/model/event.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
- // مسار مودل التصنيف
-    // مسار مودل الفعالية
+// مسار مودل التصنيف
+// مسار مودل الفعالية
 
 class SupabaseData {
   // أخذ نسخة (Instance) من عميل Supabase
   final supabase = Supabase.instance.client;
 
-
   // دالة لجلب جميع التصنيفات
   Future<List<Category>> getCategories() async {
     final response = await supabase.from('catgories').select();
-    
+
     // تحويل البيانات القادمة (List of Maps) إلى (List of Category Objects)
     return response.map((json) => Category.fromJson(json)).toList();
   }
@@ -24,11 +24,23 @@ class SupabaseData {
         .from('events3')
         .select()
         .eq('m_category', categoryId); // فلترة الفعاليات لتطابق التصنيف
-        
+
     return response.map((json) => Event.fromJson(json)).toList();
   }
 
+  Future<AuthResponse> login({
+    required String email,
+    required String password,
+  }) {
+    return supabase.auth.signInWithPassword(email: email, password: password);
+  }
 
+  Future<AuthResponse> signUp({
+    required String email,
+    required String password,
+  }) {
+    return supabase.auth.signUp(email: email, password: password);
+  }
 
   dynamic get _currentUserId => supabase.auth.currentUser?.id;
 
@@ -43,7 +55,7 @@ class SupabaseData {
       });
     } on PostgrestException catch (error) {
       if (error.code == '23505') {
-        print('Item already favorited');
+        debugPrint('Item already favorited');
       } else {
         rethrow;
       }
@@ -56,7 +68,8 @@ class SupabaseData {
 
     final response = await supabase
         .from('user_favorites')
-        .select('place_id');
+        .select('place_id')
+        .eq('user_id', userId);
 
     return List<int>.from(response.map((row) => row['place_id'] as int));
   }
@@ -65,13 +78,9 @@ class SupabaseData {
     final userId = _currentUserId;
     if (userId == null) return;
 
-    await supabase
-        .from('user_favorites')
-        .delete()
-        .match({'user_id': userId, 'place_id': placeId});
+    await supabase.from('user_favorites').delete().match({
+      'user_id': userId,
+      'place_id': placeId,
+    });
   }
-
-
-  
-
 }

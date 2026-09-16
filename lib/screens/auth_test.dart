@@ -46,20 +46,25 @@ class _AuthTestScreenState extends State<AuthTestScreen> {
       }
 
       if (!mounted) return;
+      if (_isSignIn) {
+        Navigator.pop(context, true);
+        return;
+      }
+
+      final hasSession = Supabase.instance.client.auth.currentSession != null;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            _isSignIn
-                ? 'تم تسجيل الدخول بنجاح'
-                : 'تم إنشاء الحساب بنجاح',
+            hasSession
+                ? 'تم إنشاء الحساب وتسجيل الدخول بنجاح'
+                : 'تم إنشاء الحساب. تحقق من بريدك الإلكتروني لتفعيله',
           ),
         ),
       );
     } on AuthException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.message)),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
     } finally {
       if (mounted) {
         setState(() {
@@ -124,6 +129,12 @@ class _AuthTestScreenState extends State<AuthTestScreen> {
                       validator: (value) {
                         if (value == null || value.trim().isEmpty) {
                           return 'أدخل البريد الإلكتروني';
+                        }
+                        final emailPattern = RegExp(
+                          r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
+                        );
+                        if (!emailPattern.hasMatch(value.trim())) {
+                          return 'أدخل بريداً إلكترونياً صحيحاً';
                         }
                         return null;
                       },

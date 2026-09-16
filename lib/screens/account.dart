@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:project_flutter/screens/auth_test.dart';
 import 'package:project_flutter/screens/test.dart';
@@ -13,8 +15,23 @@ class AccountScreen extends StatefulWidget {
 
 class _AccountScreenState extends State<AccountScreen> {
   bool _isSigningOut = false;
+  late final StreamSubscription<AuthState> _authSubscription;
 
   SupabaseClient get _supabase => Supabase.instance.client;
+
+  @override
+  void initState() {
+    super.initState();
+    _authSubscription = _supabase.auth.onAuthStateChange.listen((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSubscription.cancel();
+    super.dispose();
+  }
 
   Future<void> _openAuth() async {
     await Navigator.push(
@@ -53,9 +70,8 @@ class _AccountScreenState extends State<AccountScreen> {
       if (mounted) setState(() {});
     } on AuthException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.message)),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
     } finally {
       if (mounted) {
         setState(() {
@@ -101,6 +117,10 @@ class _AccountScreenState extends State<AccountScreen> {
                 subtitle: 'الفعاليات التي حفظتها',
                 color: const Color(0xFFFF4B6E),
                 onTap: () {
+                  if (!isSignedIn) {
+                    _openAuth();
+                    return;
+                  }
                   Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const TestScreen()),
@@ -155,9 +175,9 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 
   void _showComingSoon(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('هذه الميزة ستتوفر قريباً')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('هذه الميزة ستتوفر قريباً')));
   }
 }
 
@@ -211,7 +231,10 @@ class _AccountHeader extends StatelessWidget {
               onPressed: onPressed,
               child: const Text(
                 'دخول',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
         ],
@@ -303,7 +326,11 @@ class _AccountTile extends StatelessWidget {
                       height: 20,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Icon(Icons.arrow_back_ios_new_rounded, size: 16, color: Colors.grey),
+                  : const Icon(
+                      Icons.arrow_back_ios_new_rounded,
+                      size: 16,
+                      color: Colors.grey,
+                    ),
             ],
           ),
         ),
