@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:project_flutter/model/event.dart';
+import 'package:project_flutter/service/supabase_data.dart';
 import 'package:project_flutter/theme/theme.dart';
 import 'package:project_flutter/widget/status_badge.dart';
-import 'package:project_flutter/widgets/glass_container.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class EventDetailsScreen extends StatefulWidget {
@@ -84,6 +84,8 @@ class _ImageGallerySection extends StatefulWidget {
 
 class _ImageGallerySectionState extends State<_ImageGallerySection> {
   int _currentIndex = 0;
+  bool _isFavorite = false;
+  bool _isCheckingFavorite = true;
   late final List<String> _images;
 
   @override
@@ -97,6 +99,21 @@ class _ImageGallerySectionState extends State<_ImageGallerySection> {
     // إذا لم يكن هناك صور، نضع صورة افتراضية
     if (_images.isEmpty) {
       _images.add('https://via.placeholder.com/600x400?text=لا+توجد+صورة');
+    }
+    _loadFavoriteStatus();
+  }
+
+  Future<void> _loadFavoriteStatus() async {
+    try {
+      final favorites = await SupabaseData().fetchFavorites();
+      if (!mounted) return;
+      setState(() {
+        _isFavorite = favorites.contains(widget.event.id);
+        _isCheckingFavorite = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isCheckingFavorite = false);
     }
   }
 
@@ -189,10 +206,32 @@ class _ImageGallerySectionState extends State<_ImageGallerySection> {
                 BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8),
               ],
             ),
-            child: const Icon(
-              Icons.favorite_border_rounded,
-              size: 20,
-              color: Colors.black,
+            child: IconButton(
+              onPressed: _isCheckingFavorite ? null : () async {
+                final wasFavorite = _isFavorite;
+                setState(() => _isFavorite = !wasFavorite);
+
+                try {
+                  if (wasFavorite) {
+                    await SupabaseData().removeFavorite(widget.event.id);
+                  } else {
+                    await SupabaseData().addFavorite(widget.event.id);
+                  }
+                } catch (error) {
+                  if (!mounted) return;
+                  setState(() => _isFavorite = wasFavorite);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('تعذر تحديث المفضلة: $error')),
+                  );
+                }
+              },
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 20, height: 20),
+              icon: Icon(
+                _isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                size: 20,
+                color: Colors.black,
+              ),
             ),
           ),
         ),

@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:project_flutter/model/catagory_model.dart';
 import 'package:project_flutter/model/event.dart';
 import 'package:project_flutter/service/location.dart'; // استيراد ملف الموقع
+import 'package:project_flutter/screens/account.dart';
 
 import 'sign_up_page.dart';
 
@@ -423,6 +424,11 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
               });
             } else if (index == 1) {
               _showLogoutDialog(context);
+            } else if (index == 3) {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (_) => const AccountScreen()),
+              );
             }
           },
         ),
@@ -578,8 +584,14 @@ class CategoriesHeaderContainer extends StatelessWidget {
 class EventCard extends StatelessWidget {
   final Event event;
   final String? distanceText;
+  final bool showPrice;
 
-  const EventCard({super.key, required this.event, this.distanceText});
+  const EventCard({
+    super.key,
+    required this.event,
+    this.distanceText,
+    this.showPrice = true,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -637,27 +649,20 @@ class EventCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    if (!isFree) ...[
-                      // النص هنا "مدفوع" فقط وبدون سعر
+                if (showPrice) ...[
+                  const SizedBox(width: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
                       StatusBadge(
-                        text: 'مدفوع',
-                        backgroundColor: customColors.accentColorSoft,
-                        textColor: customColors.accentColor,
-                      ),
-                    ] else ...[
-                      StatusBadge(
-                        text: 'مجاني',
+                        text: isFree ? 'مجاني' : 'مدفوع',
                         backgroundColor: customColors.accentColorSoft,
                         textColor: customColors.accentColor,
                       ),
                     ],
-                  ],
-                ),
-                const SizedBox(width: 12),
+                  ),
+                  const SizedBox(width: 12),
+                ],
                 GestureDetector(
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => EventDetailsScreen(event: event))),
                   child: Container(
