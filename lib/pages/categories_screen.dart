@@ -1,40 +1,182 @@
 import 'package:flutter/material.dart';
+import 'package:project_flutter/pages/event_details.dart';
+import 'package:project_flutter/theme/theme.dart';
+import 'package:project_flutter/widget/status_badge.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:project_flutter/model/catagory_model.dart';
 import 'package:project_flutter/model/event.dart';
-import 'package:project_flutter/pages/event_details.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:project_flutter/service/location.dart'; // استيراد ملف الموقع
 
+import 'sign_up_page.dart';
 
 class CategoriesScreen extends StatefulWidget {
   const CategoriesScreen({super.key});
+
   @override
   State<CategoriesScreen> createState() => _CategoriesScreenState();
 }
+
 class _CategoriesScreenState extends State<CategoriesScreen> {
   int _currentIndex = 0;
-  int? _selectedCategoryId; // التصنيف المختار (يبدأ كـ null)
+  int? _selectedCategoryId;
   String? _selectedCategoryName;
+
+  // ==========================================
+  // متغيرات ميزة الترتيب حسب الأقرب
+  // ==========================================
+  bool _isSortingByNearest = false; // هل تم تفعيل الترتيب؟
+  bool _isLoadingLocation = false; // هل يجري تحديد الموقع الآن؟
+  Map<int, double> _distancesCache = {}; // خزن المسافات لتجنب إعادة الحساب
+
   final supabase = Supabase.instance.client;
+
   // جلب التصنيفات
   Future<List<Category>> _fetchCategories() async {
-    final response = await supabase.from('catgories').select(); // تأكد من اسم الجدول
+    final response = await supabase.from('catgories').select();
     return response.map((json) => Category.fromJson(json)).toList();
   }
-  // جلب الفعاليات بناءً على التصنيف المختار فقط
+
+  // جلب الفعاليات بناءً على التصنيف المختار
+   // جلب الفعاليات بناءً على التصنيف المختار
   Future<List<Event>> _fetchEvents(int categoryId) async {
     final response = await supabase
-        .from('events') // تأكد من اسم الجدول
+        .from('events3') // تم التغيير من events إلى events3
         .select()
-        .eq('s_category', categoryId);
+        .eq('m_category', categoryId); // وتأكد من أنك تفلتر بـ m_category إذا كان هو المستخدم في الجدول الجديد
     return response.map((json) => Event.fromJson(json)).toList();
   }
+
+  // ==========================================
+  // دالة تفعيل الترتيب حسب الأقرب
+  // ==========================================
+  Future<void> _sortByNearest() async {
+    // منع الاستدعاء المتكرر أثناء التحميل
+    if (_isLoadingLocation || _selectedCategoryId == null) return;
+
+    setState(() => _isLoadingLocation = true);
+
+    try {
+      // 1. جلب الموقع
+      final position = await determinePosition();
+
+      // 2. جلب الفعاليات مباشرة بدل الاعتماد على FutureBuilder
+      final events = await _fetchEvents(_selectedCategoryId!);
+
+      // 3. حساب المسافات وتخزينها في الـ Cache
+      final Map<int, double> newDistances = {};
+      for (final event in events) {
+        if (event.lat != null && event.lng != null) {
+          final distInMeters = distance(
+            position.latitude,
+            position.longitude,
+            event.lat!,
+            event.lng!,
+          );
+          newDistances[event.id] = distInMeters / 1000; // تحويل لكيلومتر
+        }
+      }
+
+      setState(() {
+        _distancesCache = newDistances;
+        _isSortingByNearest = true;
+        _isLoadingLocation = false;
+      });
+    } catch (e) {
+      setState(() => _isLoadingLocation = false);
+
+      // عرض الخطأ الحقيقي + رسالة واضحة
+      final errorStr = e.toString().toLowerCase();
+      String errorMessage;
+
+      if (errorStr.contains('disabled')) {
+        errorMessage = 'خدمة الموقع مغلقة. يرجى تفعيلها من الإعدادات.';
+      } else if (errorStr.contains('permanently denied')) {
+        errorMessage =
+            'تم رفض صلاحية الموقع نهائياً. يرجى السماح من إعدادات التطبيق.';
+      } else if (errorStr.contains('denied')) {
+        errorMessage = 'تم رفض صلاحية الموقع. يرجى السماح بالوصول.';
+      } else if (errorStr.contains('timeout') ||
+          errorStr.contains('timelimit')) {
+        errorMessage = 'انتهت مهلة تحديد الموقع. يرجى المحاولة مرة أخرى.';
+      } else {
+        // عرض الخطأ الفعلي لمساعدتك في التشخيص
+        errorMessage = 'خطأ: ${e.toString()}';
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5), // مدة أطول لقراءة الخطأ
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  // ==========================================
+  // دالة ترتيب الفعاليات حسب المسافة
+  // ==========================================
+  List<Event> _getSortedEvents(List<Event> events) {
+    if (!_isSortingByNearest || _distancesCache.isEmpty) return events;
+
+    final List<Event> withLocation = [];
+    final List<Event> withoutLocation = [];
+
+    for (final event in events) {
+      if (_distancesCache.containsKey(event.id)) {
+        withLocation.add(event);
+      } else {
+        withoutLocation.add(event); // الفعاليات بدون موقع تُوضع في النهاية
+      }
+    }
+
+    // ترتيب الفعاليات التي لها موقع من الأقرب للأبعد
+    withLocation.sort((a, b) {
+      final distA = _distancesCache[a.id] ?? double.maxFinite;
+      final distB = _distancesCache[b.id] ?? double.maxFinite;
+      return distA.compareTo(distB);
+    });
+
+    return [...withLocation, ...withoutLocation];
+  }
+
+  // ==========================================
+  // دالة تنسيق عرض المسافة
+  // ==========================================
+   // ==========================================
+  // دالة تنسيق عرض المسافة (محدثة)
+  // ==========================================
+  String _formatDistance(double distanceInKm) {
+    if (distanceInKm < 1) {
+      // أقل من 1 كم -> تحويل إلى متر
+      final meters = (distanceInKm * 1000).toInt();
+      return 'يبعد عنك $meters م';
+    } else {
+      // 1 كم أو أكثر -> رقم عشري واحد
+      return 'يبعد عنك ${distanceInKm.toStringAsFixed(1)} كم';
+    }
+  }
+  // ==========================================
+  // إعادة ضبط حالة الترتيب عند تغيير التصنيف
+  // ==========================================
+  void _resetSortState() {
+    _isSortingByNearest = false;
+    _distancesCache = {};
+  }
+
   @override
   Widget build(BuildContext context) {
     return Directionality(
-      textDirection: TextDirection.rtl, // دعم اللغة العربية RTL
+      textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: const Color(0xFFFAF9F6),
-        extendBody: true, // لجعل النافبار عائماً
+        extendBody: true,
         body: SafeArea(
           bottom: false,
           child: CustomScrollView(
@@ -55,12 +197,18 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                         );
                       }
                       if (snapshot.hasError) {
-                        return Center(child: Text('حدث خطأ: ${snapshot.error}'));
+                        return Center(
+                          child: Text('حدث خطأ: ${snapshot.error}'),
+                        );
                       }
                       if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                        return const Center(child: Text('لا توجد تصنيفات حالياً'));
+                        return const Center(
+                          child: Text('لا توجد تصنيفات حالياً'),
+                        );
                       }
+
                       final categories = snapshot.data!;
+
                       return CategoriesHeaderContainer(
                         categories: categories,
                         selectedCategoryId: _selectedCategoryId,
@@ -68,6 +216,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                           setState(() {
                             _selectedCategoryId = category.id;
                             _selectedCategoryName = category.name;
+                            _resetSortState(); // إعادة ضبط الترتيب عند اختيار تصنيف جديد
                           });
                         },
                       );
@@ -75,22 +224,97 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                   ),
                 ),
               ),
-              // 2. عنوان القسم في حال اختيار تصنيف
+
+              // 2. عنوان القسم وزر "الأقرب"
               if (_selectedCategoryName != null)
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    child: Text(
-                      'فعاليات: $_selectedCategoryName',
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF1E1E24),
-                      ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 12,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'فعاليات: $_selectedCategoryName',
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1E1E24),
+                          ),
+                        ),
+                        // ==========================================
+                        // زر "الأقرب" مع حالة التحميل
+                        // ==========================================
+                        // جديد ✅ (بدون FutureBuilder، بدون تمرير events)
+                        GestureDetector(
+                          onTap: _isLoadingLocation
+                              ? null
+                              : () => _sortByNearest(),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 250),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _isSortingByNearest
+                                  ? const Color(0xFF191D21)
+                                  : Colors.white,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: _isSortingByNearest
+                                    ? const Color(0xFF191D21)
+                                    : Colors.grey.shade300,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.04),
+                                  blurRadius: 8,
+                                ),
+                              ],
+                            ),
+                            child: _isLoadingLocation
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.grey,
+                                    ),
+                                  )
+                                : Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.near_me_rounded,
+                                        size: 16,
+                                        color: _isSortingByNearest
+                                            ? Colors.white
+                                            : Colors.black87,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        'الأقرب',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                          color: _isSortingByNearest
+                                              ? Colors.white
+                                              : Colors.black87,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-              // 3. قسم الفعاليات (لا يُعرض إلا عند اختيار تصنيف)
+
+              // 3. قسم الفعاليات
               if (_selectedCategoryId == null)
                 const SliverFillRemaining(
                   hasScrollBody: false,
@@ -98,7 +322,11 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.touch_app_outlined, size: 55, color: Colors.grey),
+                        Icon(
+                          Icons.touch_app_outlined,
+                          size: 55,
+                          color: Colors.grey,
+                        ),
                         SizedBox(height: 12),
                         Text(
                           'الرجاء اختيار تصنيف من الأعلى\nلعرض الفعاليات الخاصة به',
@@ -126,35 +354,53 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                         ),
                       );
                     }
+
                     if (snapshot.hasError) {
                       return SliverToBoxAdapter(
-                        child: Center(child: Text('حدث خطأ أثناء جلب الفعاليات: ${snapshot.error}')),
+                        child: Center(
+                          child: Text('حدث خطأ: ${snapshot.error}'),
+                        ),
                       );
                     }
-                    final events = snapshot.data ?? [];
-                    if (events.isEmpty) {
+
+                    final rawEvents = snapshot.data ?? [];
+
+                    if (rawEvents.isEmpty) {
                       return const SliverToBoxAdapter(
                         child: Padding(
                           padding: EdgeInsets.all(40.0),
                           child: Center(
                             child: Text(
                               'لا توجد فعاليات مسجلة لهذا التصنيف',
-                              style: TextStyle(fontSize: 15, color: Colors.grey),
+                              style: TextStyle(
+                                fontSize: 15,
+                                color: Colors.grey,
+                              ),
                             ),
                           ),
                         ),
                       );
                     }
-                    // عرض قائمة كروت الفعاليات
+
+                    // تطبيق الترتيب إذا كان مفعلاً
+                    final sortedEvents = _getSortedEvents(rawEvents);
+
                     return SliverPadding(
                       padding: const EdgeInsets.only(bottom: 110),
                       sliver: SliverList(
-                        delegate: SliverChildBuilderDelegate(
-                          (context, index) {
-                            return EventCard(event: events[index]);
-                          },
-                          childCount: events.length,
-                        ),
+                        delegate: SliverChildBuilderDelegate((context, index) {
+                          final event = sortedEvents[index];
+                          final distanceKm = _distancesCache[event.id];
+
+                          return EventCard(
+                            event: event,
+                            // تمرير المسافة فقط إذا كانت محسوبة ومفعلة
+                            distanceText:
+                                (_isSortingByNearest && distanceKm != null)
+                                ? _formatDistance(distanceKm)
+                                : null,
+                          );
+                        }, childCount: sortedEvents.length),
                       ),
                     );
                   },
@@ -162,40 +408,111 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
             ],
           ),
         ),
+
         // 4. البوتوم ناف بار العائم
         bottomNavigationBar: FloatingBottomNavBar(
           currentIndex: _currentIndex,
           onTap: (index) {
-            setState(() {
-              _currentIndex = index;
-            });
+            if (index == 0) {
+              setState(() {
+                _currentIndex = 0;
+                _selectedCategoryId = null;
+                _selectedCategoryName = null;
+                _resetSortState();
+              });
+            } else if (index == 1) {
+              _showLogoutDialog(context);
+            }
           },
         ),
       ),
     );
   }
+
+  void _showLogoutDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.logout_rounded, color: Colors.red),
+            SizedBox(width: 8),
+            Text(
+              'تسجيل الخروج',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
+          ],
+        ),
+        content: const Text(
+          'هل أنت متأكد من رغبتك في تسجيل الخروج من الحساب؟',
+          style: TextStyle(fontSize: 15),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text(
+              'إلغاء',
+              style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            onPressed: () async {
+              Navigator.pop(context);
+              await Supabase.instance.client.auth.signOut();
+              if (context.mounted) {
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(builder: (_) => const SignUpPage()),
+                  (route) => false,
+                );
+              }
+            },
+            child: const Text(
+              'تأكيد الخروج',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
+
 // ==========================================
-// 1. ويدجت حاوية التصنيفات العلوية
+// ويدجت حاوية التصنيفات (بدون تعديل)
 // ==========================================
 class CategoriesHeaderContainer extends StatelessWidget {
   final List<Category> categories;
   final int? selectedCategoryId;
   final ValueChanged<Category> onCategorySelected;
+
   const CategoriesHeaderContainer({
     super.key,
     required this.categories,
     required this.selectedCategoryId,
     required this.onCategorySelected,
   });
+
   IconData _getIconForCategory(String name) {
     if (name.contains('ثقاف')) return Icons.account_balance_rounded;
     if (name.contains('ترفيه')) return Icons.local_activity_rounded;
     if (name.contains('رياض')) return Icons.sports_soccer_rounded;
     if (name.contains('مؤتمر')) return Icons.business_center_rounded;
-    if (name.contains('تخييم') || name.contains('طبيع')) return Icons.landscape_rounded;
+    if (name.contains('تخييم') || name.contains('طبيع'))
+      return Icons.landscape_rounded;
     return Icons.category_rounded;
   }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -211,6 +528,7 @@ class CategoriesHeaderContainer extends StatelessWidget {
         runSpacing: 20,
         children: categories.map((category) {
           final isSelected = category.id == selectedCategoryId;
+
           return GestureDetector(
             onTap: () => onCategorySelected(category),
             child: Column(
@@ -225,7 +543,9 @@ class CategoriesHeaderContainer extends StatelessWidget {
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(isSelected ? 0.2 : 0.05),
+                        color: Colors.black.withOpacity(
+                          isSelected ? 0.2 : 0.05,
+                        ),
                         blurRadius: 10,
                         offset: const Offset(0, 4),
                       ),
@@ -243,7 +563,9 @@ class CategoriesHeaderContainer extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                    color: isSelected ? const Color(0xFFFF4B6E) : Colors.black87,
+                    color: isSelected
+                        ? const Color(0xFFFF4B6E)
+                        : Colors.black87,
                   ),
                 ),
               ],
@@ -254,145 +576,104 @@ class CategoriesHeaderContainer extends StatelessWidget {
     );
   }
 }
+
 // ==========================================
-// 2. كرت الفعالية (Event Card المطابق للتصميم)
+// كرت الفعالية (محدث - يستقبل distanceText)
+// ==========================================
+// ==========================================
+// كرت الفعالية (محدث)
 // ==========================================
 class EventCard extends StatelessWidget {
   final Event event;
-  const EventCard({
-    super.key,
-    required this.event,
-  });
+  final String? distanceText;
+
+  const EventCard({super.key, required this.event, this.distanceText});
+
   @override
   Widget build(BuildContext context) {
     final bool isFree = event.isFree ?? false;
-    return Container(
+    final theme = Theme.of(context);
+    final statusColors = theme.extension<AppStatusColors>()!;
+
+    return Card( // تم استخدام Card المجهز في الثيم
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
       child: Padding(
         padding: const EdgeInsets.all(12.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // صورة الغلاف بحواف دائرية
             ClipRRect(
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: BorderRadius.circular(20),
               child: AspectRatio(
                 aspectRatio: 16 / 9,
                 child: Image.network(
                   event.coverImageUrl ?? 'https://via.placeholder.com/400x225',
                   fit: BoxFit.cover,
                   errorBuilder: (context, error, stackTrace) => Container(
-                    color: Colors.grey[200],
-                    child: const Icon(Icons.broken_image, color: Colors.grey, size: 40),
+                    color: theme.colorScheme.surfaceVariant,
+                    child: Icon(Icons.broken_image, color: theme.colorScheme.onSurface.withOpacity(0.5), size: 40),
                   ),
                 ),
               ),
             ),
-            const SizedBox(height: 12),
-            // البيانات تحت الصورة: العنوان، السعر/مجاني، زر السهم الدائري
+            
+            if (distanceText != null) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Icon(Icons.location_on, size: 16, color: theme.colorScheme.onSurface.withOpacity(0.5)),
+                  const SizedBox(width: 4),
+                  Text(distanceText!, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface.withOpacity(0.6))),
+                ],
+              ),
+            ],
+            
+            const SizedBox(height: 10),
+
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // جهة العنوان والوصف
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        event.title ?? 'بدون عنوان',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w800,
-                          color: Color(0xFF1E1E24),
-                        ),
-                      ),
+                      Text(event.title ?? 'بدون عنوان', maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleLarge),
                       if (event.shortDescription != null && event.shortDescription!.isNotEmpty) ...[
                         const SizedBox(height: 4),
-                        Text(
-                          event.shortDescription!,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.grey[600],
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
+                        Text(event.shortDescription!, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall),
                       ],
                     ],
                   ),
                 ),
                 const SizedBox(width: 8),
-                // جهة السعر / مجاني
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     if (!isFree) ...[
-                      Text(
-                        'من',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey[500],
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
+                      Text('من', style: theme.textTheme.bodySmall),
                       const SizedBox(height: 2),
-                      Text(
-                        '${event.priceMin?.toStringAsFixed(0) ?? 0} ر.س',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          color: Color(0xFFD35400),
-                        ),
+                      StatusBadge(
+                        text: '${event.priceMin?.toStringAsFixed(0) ?? 0} ر.س',
+                        backgroundColor: statusColors.priceColorBg,
+                        textColor: statusColors.priceColor,
                       ),
                     ] else ...[
-                      const Text(
-                        'مجاني',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          color: Color(0xFF27AE60),
-                        ),
+                      StatusBadge(
+                        text: 'مجاني',
+                        backgroundColor: statusColors.freeColorBg,
+                        textColor: statusColors.freeColor,
                       ),
                     ],
                   ],
                 ),
                 const SizedBox(width: 12),
-                // زر السهم الدائري الأسود للانتقال لصفحة التفاصيل
                 GestureDetector(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => EventDetailsScreen(event: event),
-                      ),
-                    );
-                  },
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => EventDetailsScreen(event: event))),
                   child: Container(
                     width: 44,
                     height: 44,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF191D21),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.arrow_forward_rounded,
-                      color: Colors.white,
-                      size: 20,
-                    ),
+                    decoration: BoxDecoration(color: theme.colorScheme.primary, shape: BoxShape.circle),
+                    child: Icon(Icons.arrow_forward_rounded, color: theme.colorScheme.onPrimary, size: 20),
                   ),
                 ),
               ],
@@ -404,20 +685,22 @@ class EventCard extends StatelessWidget {
   }
 }
 // ==========================================
-// 3. البوتوم ناف بار العائم
+// البوتوم ناف بار العائم (بدون تعديل)
 // ==========================================
 class FloatingBottomNavBar extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
+
   const FloatingBottomNavBar({
     super.key,
     required this.currentIndex,
     required this.onTap,
   });
+
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(left: 24, right: 24, bottom: 24),
+      margin: const EdgeInsets.only(left: 40, right: 40, bottom: 24),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -431,24 +714,24 @@ class FloatingBottomNavBar extends StatelessWidget {
         ],
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           _buildNavItem(0, Icons.home_rounded, 'الرئيسية'),
-          _buildNavItem(1, Icons.explore_rounded, 'استكشف'),
-          _buildNavItem(2, Icons.calendar_today_rounded, 'الفعاليات'),
-          _buildNavItem(3, Icons.person_rounded, 'حسابي'),
+          _buildNavItem(1, Icons.person_rounded, 'حسابي'),
         ],
       ),
     );
   }
+
   Widget _buildNavItem(int index, IconData icon, String label) {
     final isSelected = currentIndex == index;
+
     return GestureDetector(
       onTap: () => onTap(index),
       behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 250),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         decoration: BoxDecoration(
           color: isSelected ? const Color(0xFFFF4B6E) : Colors.transparent,
           borderRadius: BorderRadius.circular(30),
@@ -459,7 +742,7 @@ class FloatingBottomNavBar extends StatelessWidget {
             Icon(
               icon,
               color: isSelected ? Colors.white : Colors.black54,
-              size: 22,
+              size: 24,
             ),
             if (isSelected) ...[
               const SizedBox(width: 8),
@@ -468,10 +751,10 @@ class FloatingBottomNavBar extends StatelessWidget {
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
-                  fontSize: 13,
+                  fontSize: 14,
                 ),
               ),
-            ]
+            ],
           ],
         ),
       ),
