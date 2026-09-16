@@ -25,6 +25,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Events App',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData.dark(
         
           

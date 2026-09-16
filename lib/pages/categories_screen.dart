@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:project_flutter/model/catagory_model.dart';
 import 'package:project_flutter/model/event.dart';
 import 'package:project_flutter/pages/event_details.dart';
+import 'package:project_flutter/screens/account.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 
@@ -169,6 +170,12 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
             setState(() {
               _currentIndex = index;
             });
+            if (index == 3) {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (_) => const AccountScreen()),
+              );
+            }
           },
         ),
       ),
@@ -259,9 +266,12 @@ class CategoriesHeaderContainer extends StatelessWidget {
 // ==========================================
 class EventCard extends StatelessWidget {
   final Event event;
+  final bool showPrice;
+
   const EventCard({
     super.key,
     required this.event,
+    this.showPrice = true,
   });
   @override
   Widget build(BuildContext context) {
@@ -335,42 +345,44 @@ class EventCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                // جهة السعر / مجاني
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    if (!isFree) ...[
-                      Text(
-                        'من',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey[500],
-                          fontWeight: FontWeight.w500,
+                if (showPrice) ...[
+                  const SizedBox(width: 8),
+                  // جهة السعر / مجاني
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      if (!isFree) ...[
+                        Text(
+                          'من',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey[500],
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${event.priceMin?.toStringAsFixed(0) ?? 0} ر.س',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          color: Color(0xFFD35400),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${event.priceMin?.toStringAsFixed(0) ?? 0} ر.س',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFFD35400),
+                          ),
                         ),
-                      ),
-                    ] else ...[
-                      const Text(
-                        'مجاني',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          color: Color(0xFF27AE60),
+                      ] else ...[
+                        const Text(
+                          'مجاني',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF27AE60),
+                          ),
                         ),
-                      ),
+                      ],
                     ],
-                  ],
-                ),
-                const SizedBox(width: 12),
+                  ),
+                  const SizedBox(width: 12),
+                ],
                 // زر السهم الدائري الأسود للانتقال لصفحة التفاصيل
                 GestureDetector(
                   onTap: () {
