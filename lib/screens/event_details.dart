@@ -674,7 +674,7 @@ class _VisitedPlaceButton extends StatelessWidget {
       child: OutlinedButton.icon(
         onPressed: () => _openDialog(context),
         icon: const Icon(Icons.check_circle_outline_rounded),
-        label: const Text('سجلت زيارة هذا المكان'),
+        label: const Text('سجل المكان كمكان مُزار'),
       ),
     );
   }

@@ -9,6 +9,7 @@ import 'package:project_flutter/model/event.dart';
 import 'package:project_flutter/service/location.dart'; // استيراد ملف الموقع
 import 'package:project_flutter/screens/account.dart';
 import 'package:project_flutter/screens/add_place_screen.dart';
+import 'package:project_flutter/widgets/chat_fab_button.dart';
 
 class CategoriesScreen extends StatefulWidget {
   const CategoriesScreen({super.key});
@@ -205,181 +206,195 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
       child: Scaffold(
         backgroundColor: const Color(0xFFFAF9F6),
         extendBody: true,
-        body: SafeArea(
-          bottom: false,
-          child: CustomScrollView(
-            slivers: [
-              // 1. قسم التصنيفات العلوي
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 16, bottom: 8),
-                  child: FutureBuilder<List<Category>>(
-                    future: _categoriesFuture,
+        body: Stack(
+          children: [
+            SafeArea(
+              bottom: false,
+              child: CustomScrollView(
+                slivers: [
+                  // 1. قسم التصنيفات العلوي
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 16, bottom: 8),
+                      child: FutureBuilder<List<Category>>(
+                        future: _categoriesFuture,
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(24.0),
+                                child: CircularProgressIndicator(),
+                              ),
+                            );
+                          }
+                          if (snapshot.hasError) {
+                            return Center(
+                              child: Text('حدث خطأ: ${snapshot.error}'),
+                            );
+                          }
+                          if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                            return const Center(
+                              child: Text('لا توجد تصنيفات حالياً'),
+                            );
+                          }
+
+                          final categories = snapshot.data!;
+
+                          return CategoriesHeaderContainer(
+                            categories: categories,
+                            selectedCategoryId: _selectedCategoryId,
+                            onCategorySelected: (category) {
+                              setState(() {
+                                _selectedCategoryId = category.id;
+                                _selectedCategoryName = category.name;
+                                _eventsFuture = _fetchEvents(category.id);
+                                _loadedEvents = null;
+                                _sortRequestId++;
+                                _isLoadingLocation = false;
+                                _resetSortState();
+                              });
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+
+                  // 2. عنوان الأماكن المرتبة حسب القرب
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 12,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            _selectedCategoryName ?? 'الأقرب',
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1E1E24),
+                            ),
+                          ),
+                          if (_selectedCategoryId != null)
+                            GestureDetector(
+                              onTap: _isLoadingLocation ? null : _sortByNearest,
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: _isSortingByNearest
+                                      ? const Color(0xFF191D21)
+                                      : Colors.white,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: _isSortingByNearest
+                                        ? const Color(0xFF191D21)
+                                        : Colors.grey.shade300,
+                                  ),
+                                ),
+                                child: Text(
+                                  'ترتيب حسب الأقرب',
+                                  style: TextStyle(
+                                    color: _isSortingByNearest
+                                        ? Colors.white
+                                        : Colors.black87,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // 3. قسم الأماكن
+                  FutureBuilder<List<Event>>(
+                    future: _eventsFuture,
                     builder: (context, snapshot) {
+                      if (_isLoadingLocation) {
+                        return const SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: Center(child: CircularProgressIndicator()),
+                        );
+                      }
+
                       if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(
+                        return const SliverToBoxAdapter(
                           child: Padding(
-                            padding: EdgeInsets.all(24.0),
-                            child: CircularProgressIndicator(),
+                            padding: EdgeInsets.all(40.0),
+                            child: Center(child: CircularProgressIndicator()),
                           ),
                         );
                       }
+
                       if (snapshot.hasError) {
-                        return Center(
-                          child: Text('حدث خطأ: ${snapshot.error}'),
-                        );
-                      }
-                      if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                        return const Center(
-                          child: Text('لا توجد تصنيفات حالياً'),
+                        return SliverToBoxAdapter(
+                          child: Center(
+                            child: Text('حدث خطأ: ${snapshot.error}'),
+                          ),
                         );
                       }
 
-                      final categories = snapshot.data!;
+                      if (snapshot.hasData) _loadedEvents = snapshot.data!;
+                      final rawEvents = snapshot.data ?? _loadedEvents ?? [];
 
-                      return CategoriesHeaderContainer(
-                        categories: categories,
-                        selectedCategoryId: _selectedCategoryId,
-                        onCategorySelected: (category) {
-                          setState(() {
-                            _selectedCategoryId = category.id;
-                            _selectedCategoryName = category.name;
-                            _eventsFuture = _fetchEvents(category.id);
-                            _loadedEvents = null;
-                            _sortRequestId++;
-                            _isLoadingLocation = false;
-                            _resetSortState();
-                          });
-                        },
+                      if (rawEvents.isEmpty) {
+                        return const SliverToBoxAdapter(
+                          child: Padding(
+                            padding: EdgeInsets.all(40.0),
+                            child: Center(
+                              child: Text(
+                                'لا توجد أماكن مسجلة لهذا التصنيف',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }
+
+                      // تطبيق الترتيب إذا كان مفعلاً
+                      final sortedEvents = _getSortedEvents(rawEvents);
+
+                      return SliverPadding(
+                        padding: const EdgeInsets.only(bottom: 110),
+                        sliver: SliverList(
+                          delegate: SliverChildBuilderDelegate((
+                            context,
+                            index,
+                          ) {
+                            final event = sortedEvents[index];
+                            final distanceKm = _distancesCache[event.id];
+
+                            return EventCard(
+                              event: event,
+                              // تمرير المسافة فقط إذا كانت محسوبة ومفعلة
+                              distanceText:
+                                  (_isSortingByNearest && distanceKm != null)
+                                  ? _formatDistance(distanceKm)
+                                  : null,
+                            );
+                          }, childCount: sortedEvents.length),
+                        ),
                       );
                     },
                   ),
-                ),
+                ],
               ),
-
-              // 2. عنوان الأماكن المرتبة حسب القرب
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 12,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        _selectedCategoryName ?? 'الأقرب',
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1E1E24),
-                        ),
-                      ),
-                      if (_selectedCategoryId != null)
-                        GestureDetector(
-                          onTap: _isLoadingLocation ? null : _sortByNearest,
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 8,
-                            ),
-                            decoration: BoxDecoration(
-                              color: _isSortingByNearest
-                                  ? const Color(0xFF191D21)
-                                  : Colors.white,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: _isSortingByNearest
-                                    ? const Color(0xFF191D21)
-                                    : Colors.grey.shade300,
-                              ),
-                            ),
-                            child: Text(
-                              'ترتيب حسب الأقرب',
-                              style: TextStyle(
-                                color: _isSortingByNearest
-                                    ? Colors.white
-                                    : Colors.black87,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-
-              // 3. قسم الأماكن
-              FutureBuilder<List<Event>>(
-                future: _eventsFuture,
-                builder: (context, snapshot) {
-                  if (_isLoadingLocation) {
-                    return const SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: Center(child: CircularProgressIndicator()),
-                    );
-                  }
-
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const SliverToBoxAdapter(
-                      child: Padding(
-                        padding: EdgeInsets.all(40.0),
-                        child: Center(child: CircularProgressIndicator()),
-                      ),
-                    );
-                  }
-
-                  if (snapshot.hasError) {
-                    return SliverToBoxAdapter(
-                      child: Center(child: Text('حدث خطأ: ${snapshot.error}')),
-                    );
-                  }
-
-                  if (snapshot.hasData) _loadedEvents = snapshot.data!;
-                  final rawEvents = snapshot.data ?? _loadedEvents ?? [];
-
-                  if (rawEvents.isEmpty) {
-                    return const SliverToBoxAdapter(
-                      child: Padding(
-                        padding: EdgeInsets.all(40.0),
-                        child: Center(
-                          child: Text(
-                            'لا توجد أماكن مسجلة لهذا التصنيف',
-                            style: TextStyle(fontSize: 15, color: Colors.grey),
-                          ),
-                        ),
-                      ),
-                    );
-                  }
-
-                  // تطبيق الترتيب إذا كان مفعلاً
-                  final sortedEvents = _getSortedEvents(rawEvents);
-
-                  return SliverPadding(
-                    padding: const EdgeInsets.only(bottom: 110),
-                    sliver: SliverList(
-                      delegate: SliverChildBuilderDelegate((context, index) {
-                        final event = sortedEvents[index];
-                        final distanceKm = _distancesCache[event.id];
-
-                        return EventCard(
-                          event: event,
-                          // تمرير المسافة فقط إذا كانت محسوبة ومفعلة
-                          distanceText:
-                              (_isSortingByNearest && distanceKm != null)
-                              ? _formatDistance(distanceKm)
-                              : null,
-                        );
-                      }, childCount: sortedEvents.length),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
+            ),
+            const ChatFabButton(),
+          ],
         ),
 
         // 4. البوتوم ناف بار العائم
@@ -514,12 +529,14 @@ class EventCard extends StatelessWidget {
   final Event event;
   final String? distanceText;
   final bool showPrice;
+  final VoidCallback? onRemoveFavorite;
 
   const EventCard({
     super.key,
     required this.event,
     this.distanceText,
     this.showPrice = true,
+    this.onRemoveFavorite,
   });
 
   @override
@@ -535,23 +552,49 @@ class EventCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(20),
-              child: AspectRatio(
-                aspectRatio: 16 / 9,
-                child: Image.network(
-                  event.coverImageUrl ?? 'https://via.placeholder.com/400x225',
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Container(
-                    color: theme.colorScheme.surfaceVariant,
-                    child: Icon(
-                      Icons.broken_image,
-                      color: theme.colorScheme.onSurface.withOpacity(0.5),
-                      size: 40,
+            Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: AspectRatio(
+                    aspectRatio: 16 / 9,
+                    child: Image.network(
+                      event.coverImageUrl ??
+                          'https://via.placeholder.com/400x225',
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        color: theme.colorScheme.surfaceVariant,
+                        child: Icon(
+                          Icons.broken_image,
+                          color: theme.colorScheme.onSurface.withOpacity(0.5),
+                          size: 40,
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              ),
+                if (onRemoveFavorite != null)
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: GestureDetector(
+                      onTap: onRemoveFavorite,
+                      child: Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.45),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.favorite_rounded,
+                          color: Color(0xFFFF4B6E),
+                          size: 20,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
 
             if (distanceText != null) ...[

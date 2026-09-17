@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:project_flutter/screens/categories_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:project_flutter/theme/theme.dart'; // مسار ملف الثيم الجديد
@@ -7,6 +8,9 @@ import 'package:project_flutter/theme/theme.dart'; // مسار ملف الثيم
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // تحميل متغيرات البيئة (مفتاح Gemini API وغيره)
+  await dotenv.load(fileName: '.env');
 
   // تهيئة Supabase (تأكد من وضع روابط مشروعك هنا)
   await Supabase.initialize(

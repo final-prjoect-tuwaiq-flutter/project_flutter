@@ -4,6 +4,7 @@ import 'package:project_flutter/screens/categories_screen.dart';
 import 'package:project_flutter/screens/account.dart';
 import 'package:project_flutter/screens/add_place_screen.dart';
 import 'package:project_flutter/service/supabase_data.dart';
+import 'package:project_flutter/widgets/chat_fab_button.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class FavoritesScreen extends StatefulWidget {
@@ -16,6 +17,7 @@ class FavoritesScreen extends StatefulWidget {
 class _FavoritesScreenState extends State<FavoritesScreen> {
   int _currentIndex = 2;
   late Future<List<Event>> _favoritesFuture;
+  List<Event>? _events;
 
   @override
   void initState() {
@@ -38,8 +40,34 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
   Future<void> _refreshFavorites() async {
     setState(() {
       _favoritesFuture = _loadFavorites();
+      _events = null;
     });
     await _favoritesFuture;
+  }
+
+  Future<void> _removeFavorite(Event event) async {
+    final previousEvents = _events;
+    setState(() {
+      _events = (_events ?? []).where((e) => e.id != event.id).toList();
+    });
+
+    try {
+      await SupabaseData().removeFavorite(event.id);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _events = previousEvents;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تعذر إزالة المكان من المفضلة')),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('تمت إزالة المكان من المفضلة')),
+    );
   }
 
   void _handleNavigation(int index) {
@@ -72,47 +100,57 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
       child: Scaffold(
         backgroundColor: const Color(0xFFFAF9F6),
         extendBody: true,
-        body: SafeArea(
-          bottom: false,
-          child: FutureBuilder<List<Event>>(
-            future: _favoritesFuture,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const _FavoritesLoadingView();
-              }
+        body: Stack(
+          children: [
+            SafeArea(
+              bottom: false,
+              child: FutureBuilder<List<Event>>(
+                future: _favoritesFuture,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const _FavoritesLoadingView();
+                  }
 
-              if (snapshot.hasError) {
-                return _FavoritesErrorView(
-                  onRetry: _refreshFavorites,
-                  error: snapshot.error.toString(),
-                );
-              }
+                  if (snapshot.hasError) {
+                    return _FavoritesErrorView(
+                      onRetry: _refreshFavorites,
+                      error: snapshot.error.toString(),
+                    );
+                  }
 
-              final events = snapshot.data ?? [];
-              if (events.isEmpty) {
-                return const _EmptyFavoritesView();
-              }
+                  _events ??= snapshot.data ?? [];
+                  final events = _events!;
+                  if (events.isEmpty) {
+                    return const _EmptyFavoritesView();
+                  }
 
-              return RefreshIndicator(
-                color: const Color(0xFFFF4B6E),
-                onRefresh: _refreshFavorites,
-                child: CustomScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  slivers: [
-                    const SliverToBoxAdapter(child: _FavoritesHeader()),
-                    SliverList(
-                      delegate: SliverChildBuilderDelegate(
-                        (context, index) =>
-                            EventCard(event: events[index], showPrice: false),
-                        childCount: events.length,
-                      ),
+                  return RefreshIndicator(
+                    color: const Color(0xFFFF4B6E),
+                    onRefresh: _refreshFavorites,
+                    child: CustomScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      slivers: [
+                        const SliverToBoxAdapter(child: _FavoritesHeader()),
+                        SliverList(
+                          delegate: SliverChildBuilderDelegate(
+                            (context, index) => EventCard(
+                              event: events[index],
+                              showPrice: false,
+                              onRemoveFavorite: () =>
+                                  _removeFavorite(events[index]),
+                            ),
+                            childCount: events.length,
+                          ),
+                        ),
+                        const SliverToBoxAdapter(child: SizedBox(height: 120)),
+                      ],
                     ),
-                    const SliverToBoxAdapter(child: SizedBox(height: 120)),
-                  ],
-                ),
-              );
-            },
-          ),
+                  );
+                },
+              ),
+            ),
+            const ChatFabButton(),
+          ],
         ),
         bottomNavigationBar: FloatingBottomNavBar(
           currentIndex: _currentIndex,
@@ -176,7 +214,7 @@ class _FavoritesHeader extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            'الأماكن التي اخترتها لك لاحقاً',
+            'اماكنك المفضلة',
             style: TextStyle(
               color: Colors.grey[600],
               fontSize: 14,
