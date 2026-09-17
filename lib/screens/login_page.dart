@@ -1,7 +1,8 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:project_flutter/screens/categories_screen.dart';
 import 'package:project_flutter/service/supabase_data.dart';
-import 'package:project_flutter/theme/theme.dart';
+import 'package:project_flutter/widgets/app_ui.dart';
+import 'package:project_flutter/widgets/auth_layout.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:project_flutter/screens/sign_up_page.dart';
@@ -26,11 +27,13 @@ class LoginController {
   }
 
   String? validateEmail(String? value) {
-    if (value == null || value.trim().isEmpty)
+    if (value == null || value.trim().isEmpty) {
       return 'الرجاء إدخال البريد الإلكتروني';
+    }
     final emailRegex = RegExp(r'^[^@]+@[^@]+\.[^@]+');
-    if (!emailRegex.hasMatch(value.trim()))
+    if (!emailRegex.hasMatch(value.trim())) {
       return 'صيغة البريد الإلكتروني غير صحيحة';
+    }
     return null;
   }
 
@@ -94,253 +97,206 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final colors = appColors(context);
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: theme.colorScheme.surface,
-        body: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
-            child: Form(
-              key: _controller.formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: 40),
-
-                  // الشعار والنص الترحيبي
-                  Center(
-                    child: Column(
-                      children: [
-                        Icon(
-                          Icons.event_available_rounded,
-                          size: 50,
-                          color: theme.colorScheme.primary,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'مرحباً بك في المعزب!',
-                          style: theme.textTheme.titleLarge?.copyWith(
-                            fontSize: 26,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'سجل دخولك الآن وتابع أماكنك المفضلة',
-                          style: theme.textTheme.bodyMedium,
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 40),
-
-                  // حقل البريد الإلكتروني
-                  Text('البريد الإلكتروني', style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: _controller.emailController,
-                    validator: _controller.validateEmail,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(
-                      hintText: 'أدخل بريدك الإلكتروني',
-                      prefixIcon: Icon(Icons.email_outlined),
-                    ),
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  // حقل كلمة المرور
-                  Text('كلمة المرور', style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: _controller.passwordController,
-                    validator: _controller.validatePassword,
-                    obscureText: !_controller.isPasswordVisible,
-                    decoration: InputDecoration(
-                      hintText: 'أدخل كلمة المرور',
-                      prefixIcon: const Icon(Icons.lock_outline_rounded),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _controller.isPasswordVisible
-                              ? Icons.visibility
-                              : Icons.visibility_off,
-                          color: theme.colorScheme.onSurface.withOpacity(0.5),
-                        ),
-                        onPressed: () {
-                          setState(() {
-                            _controller.isPasswordVisible =
-                                !_controller.isPasswordVisible;
-                          });
-                        },
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  // تذكرني ونسيت كلمة المرور
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          Checkbox(
-                            value: _controller.rememberMe,
-                            activeColor: theme.colorScheme.primary,
-                            onChanged: (val) {
-                              setState(
-                                () => _controller.rememberMe = val ?? false,
-                              );
-                            },
-                          ),
-                          Text('تذكرني', style: theme.textTheme.bodyMedium),
-                        ],
-                      ),
-                      TextButton(
-                        onPressed: () {},
-                        child: Text(
-                          'نسيت كلمة المرور؟',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.primary,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // زر تسجيل الدخول
-                  SizedBox(
-                    width: double.infinity,
-                    height: 56,
-                    child: ElevatedButton(
-                      style: AppTheme.blackCtaButtonStyle,
-                      onPressed: _controller.isLoading
-                          ? null
-                          : () async {
-                              bool success = await _controller.login(
-                                context,
-                                () => setState(() {}),
-                              );
-                              if (success && context.mounted) {
-                                Navigator.pushReplacement(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => const CategoriesScreen(),
-                                  ),
-                                );
-                              }
-                            },
-                      child: _controller.isLoading
-                          ? CircularProgressIndicator(
-                              color: theme.colorScheme.onPrimary,
-                            )
-                          : Text(
-                              'تسجيل الدخول',
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                color: Colors.white,
-                              ),
-                            ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 32),
-
-                  // فاصل أو عبر
-                  Row(
-                    children: [
-                      const Expanded(child: Divider()),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Text('أو عبر', style: theme.textTheme.bodySmall),
-                      ),
-                      const Expanded(child: Divider()),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-
-                  // أزرار التواصل الاجتماعي
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _socialButton(context, Icons.apple),
-                      const SizedBox(width: 16),
-                      _socialButton(
-                        context,
-                        Icons.g_mobiledata_rounded,
-                        iconSize: 36,
-                      ),
-                      const SizedBox(width: 16),
-                      _socialButton(context, Icons.facebook),
-                    ],
-                  ),
-
-                  const SizedBox(height: 40),
-
-                  // رابط إنشاء الحساب
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text('ليس لديك حساب؟', style: theme.textTheme.bodyMedium),
-                      TextButton(
-                        onPressed: () {
-                          Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const SignUpPage(),
-                            ),
-                          );
-                        },
-                        child: Text(
-                          'سجل الآن',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.primary,
-                            fontWeight: FontWeight.bold,
-                            decoration: TextDecoration.underline,
-                            decorationColor: theme.colorScheme.primary,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+    return AuthLayout(
+      title: 'حيّاك في المعزب',
+      subtitle: 'سجل دخولك وتابع أماكنك المفضلة',
+      child: Form(
+        key: _controller.formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // حقل البريد الإلكتروني
+            const AuthFieldLabel('البريد الإلكتروني'),
+            TextFormField(
+              controller: _controller.emailController,
+              validator: _controller.validateEmail,
+              keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.next,
+              decoration: const InputDecoration(
+                hintText: 'name@example.com',
+                prefixIcon: Icon(Icons.alternate_email_rounded),
               ),
             ),
-          ),
+
+            const SizedBox(height: 18),
+
+            // حقل كلمة المرور
+            const AuthFieldLabel('كلمة المرور'),
+            TextFormField(
+              controller: _controller.passwordController,
+              validator: _controller.validatePassword,
+              obscureText: !_controller.isPasswordVisible,
+              decoration: InputDecoration(
+                hintText: 'أدخل كلمة المرور',
+                prefixIcon: const Icon(Icons.lock_outline_rounded),
+                suffixIcon: IconButton(
+                  tooltip: _controller.isPasswordVisible
+                      ? 'إخفاء كلمة المرور'
+                      : 'إظهار كلمة المرور',
+                  icon: Icon(
+                    _controller.isPasswordVisible
+                        ? Icons.visibility_rounded
+                        : Icons.visibility_off_rounded,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _controller.isPasswordVisible =
+                          !_controller.isPasswordVisible;
+                    });
+                  },
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 8),
+
+            // تذكرني ونسيت كلمة المرور
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                InkWell(
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: () => setState(
+                    () => _controller.rememberMe = !_controller.rememberMe,
+                  ),
+                  child: Row(
+                    children: [
+                      Checkbox(
+                        value: _controller.rememberMe,
+                        onChanged: (val) {
+                          setState(() => _controller.rememberMe = val ?? false);
+                        },
+                      ),
+                      Text(
+                        'تذكرني',
+                        style: TextStyle(
+                          color: colors.textPrimary,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                TextButton(
+                  onPressed: () {},
+                  child: const Text('نسيت كلمة المرور؟'),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 18),
+
+            // زر تسجيل الدخول
+            AppGradientButton(
+              label: 'تسجيل الدخول',
+              icon: Icons.arrow_back_rounded,
+              isLoading: _controller.isLoading,
+              onPressed: _controller.isLoading
+                  ? null
+                  : () async {
+                      bool success = await _controller.login(
+                        context,
+                        () => setState(() {}),
+                      );
+                      if (success && context.mounted) {
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const CategoriesScreen(),
+                          ),
+                        );
+                      }
+                    },
+            ),
+
+            const SizedBox(height: 28),
+
+            // فاصل أو عبر
+            Row(
+              children: [
+                const Expanded(child: Divider()),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  child: Text(
+                    'أو عبر',
+                    style: TextStyle(
+                      color: colors.textMuted,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const Expanded(child: Divider()),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            // أزرار التواصل الاجتماعي
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _socialButton(context, Icons.apple),
+                const SizedBox(width: 14),
+                _socialButton(
+                  context,
+                  Icons.g_mobiledata_rounded,
+                  iconSize: 34,
+                ),
+                const SizedBox(width: 14),
+                _socialButton(context, Icons.facebook),
+              ],
+            ),
+
+            const SizedBox(height: 28),
+
+            // رابط إنشاء الحساب
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  'ليس لديك حساب؟',
+                  style: TextStyle(
+                    color: colors.textMuted,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                TextButton(
+                  onPressed: () {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (_) => const SignUpPage()),
+                    );
+                  },
+                  child: const Text('أنشئ حساباً'),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
   }
 
-  // ويدجت زر السوشيال ميديا - ألوانه من الثيم
+  // زر السوشيال ميديا
   Widget _socialButton(
     BuildContext context,
     IconData icon, {
     double iconSize = 24,
   }) {
-    final theme = Theme.of(context);
+    final colors = appColors(context);
     return Container(
-      width: 50,
-      height: 50,
+      width: 56,
+      height: 56,
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: theme.dividerTheme.color ?? Colors.grey.shade300,
-        ),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8),
-        ],
+        color: colors.surfaceColor,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: colors.borderSoft),
       ),
       child: Center(
-        child: Icon(icon, color: theme.colorScheme.onSurface, size: iconSize),
+        child: Icon(icon, color: colors.textPrimary, size: iconSize),
       ),
     );
   }

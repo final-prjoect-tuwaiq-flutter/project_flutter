@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:project_flutter/theme/theme.dart';
+import 'package:project_flutter/widgets/glass_container.dart';
 
+/// شريط التنقل السفلي العائم الموحّد لكل الشاشات.
 class AppBottomNavBar extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
@@ -13,41 +15,70 @@ class AppBottomNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final customColors = Theme.of(context).extension<AppCustomColors>()!;
+    final colors = Theme.of(context).extension<AppCustomColors>()!;
 
     return Container(
-      margin: const EdgeInsets.only(left: 28, right: 28, bottom: 24),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      margin: const EdgeInsets.only(left: 30, right: 30, bottom: 22),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(30),
+        borderRadius: BorderRadius.circular(34),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
+            color: colors.inkColor.withValues(alpha: 0.30),
+            blurRadius: 26,
+            offset: const Offset(0, 12),
           ),
         ],
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _NavItem(
-            icon: Icons.home_rounded,
-            label: 'الرئيسية',
-            selected: currentIndex == 0,
-            color: customColors.accentColor,
-            onTap: () => onTap(0),
-          ),
-          _AddItem(color: customColors.accentColor, onTap: () => onTap(1)),
-          _NavItem(
-            icon: Icons.person_rounded,
-            label: 'حسابي',
-            selected: currentIndex == 2,
-            color: customColors.accentColor,
-            onTap: () => onTap(2),
-          ),
-        ],
+      child: GlassContainer(
+        borderRadius: 34.0,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            _NavItem(
+              icon: Icons.explore_rounded,
+              label: 'الرئيسية',
+              selected: currentIndex == 0,
+              onTap: () => onTap(0),
+            ),
+            Semantics(
+              button: true,
+              label: 'إضافة مكان',
+              child: GestureDetector(
+                onTap: () => onTap(1),
+                child: Container(
+                  width: 54,
+                  height: 54,
+                  decoration: BoxDecoration(
+                    gradient: colors.accentGradient,
+                    shape: BoxShape.circle,
+                    border: currentIndex == 1
+                        ? Border.all(color: Colors.white, width: 2)
+                        : null,
+                    boxShadow: [
+                      BoxShadow(
+                        color: colors.accentColor.withValues(alpha: 0.5),
+                        blurRadius: 18,
+                        offset: const Offset(0, 7),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.add_rounded,
+                    color: Colors.white,
+                    size: 29,
+                  ),
+                ),
+              ),
+            ),
+            _NavItem(
+              icon: Icons.person_rounded,
+              label: 'حسابي',
+              selected: currentIndex == 2,
+              onTap: () => onTap(2),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -57,76 +88,59 @@ class _NavItem extends StatelessWidget {
   final IconData icon;
   final String label;
   final bool selected;
-  final Color color;
   final VoidCallback onTap;
 
   const _NavItem({
     required this.icon,
     required this.label,
     required this.selected,
-    required this.color,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    final colors = Theme.of(context).extension<AppCustomColors>()!;
+
+    return GestureDetector(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(24),
+      behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
         decoration: BoxDecoration(
-          color: selected ? color.withValues(alpha: 0.12) : Colors.transparent,
-          borderRadius: BorderRadius.circular(24),
+          color: selected
+              ? Colors.white.withValues(alpha: 0.10)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(30),
+          border: Border.all(
+            color: selected
+                ? colors.accentColor.withValues(alpha: 0.45)
+                : Colors.transparent,
+          ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: selected ? color : Colors.black54, size: 23),
+            Icon(
+              icon,
+              color: selected
+                  ? colors.goldColor
+                  : Colors.white.withValues(alpha: 0.55),
+              size: 23,
+            ),
             if (selected) ...[
-              const SizedBox(width: 6),
+              const SizedBox(width: 8),
               Text(
                 label,
-                style: TextStyle(color: color, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  color: colors.goldColor,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                ),
               ),
             ],
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _AddItem extends StatelessWidget {
-  final Color color;
-  final VoidCallback onTap;
-
-  const _AddItem({required this.color, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: 'إضافة مكان',
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(30),
-        child: Container(
-          width: 52,
-          height: 52,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: color.withValues(alpha: 0.28),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: const Icon(Icons.add_rounded, color: Colors.white, size: 30),
         ),
       ),
     );

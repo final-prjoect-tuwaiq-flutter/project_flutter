@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:project_flutter/screens/categories_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:project_flutter/screens/splash_screen.dart';
 import 'package:project_flutter/theme/theme.dart'; // مسار ملف الثيم الجديد
+import 'package:project_flutter/theme/theme_controller.dart';
 
 // استيراد الصفحات الخاصة بك (تأكد من تعديل المسارات لتطابق مشروعك)
 
@@ -18,6 +20,9 @@ void main() async {
     anonKey: 'sb_publishable_QGi8lP0L6UvblvlmGXElEQ_QFU9ASxN',
   );
 
+  // تحميل المظهر المحفوظ (فاتح / داكن / حسب النظام)
+  await ThemeController.instance.load();
+
   runApp(const MyApp());
 }
 
@@ -26,12 +31,16 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // داخل دالة build
-    return MaterialApp(
-      title: 'المعزب',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme, // <<--- هذا السطر هو الأهم
-      home: const AuthWrapper(),
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: ThemeController.instance,
+      builder: (context, themeMode, _) => MaterialApp(
+        title: 'المعزب',
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.lightTheme,
+        darkTheme: AppTheme.darkTheme,
+        themeMode: themeMode,
+        home: SplashScreen(nextBuilder: (_) => const AuthWrapper()),
+      ),
     );
   }
 }

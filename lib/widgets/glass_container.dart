@@ -1,5 +1,7 @@
-﻿import 'dart:ui';
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
+import 'package:project_flutter/theme/theme.dart';
 
 class GlassContainer extends StatelessWidget {
   final Widget child;
@@ -29,20 +31,29 @@ class GlassContainer extends StatelessWidget {
       height: height,
       decoration: BoxDecoration(
         shape: shape,
-        borderRadius: shape == BoxShape.circle ? null : BorderRadius.circular(borderRadius),
+        borderRadius: shape == BoxShape.circle
+            ? null
+            : BorderRadius.circular(borderRadius),
       ),
       child: ClipRRect(
-        borderRadius: shape == BoxShape.circle ? BorderRadius.circular(999) : BorderRadius.circular(borderRadius),
+        borderRadius: shape == BoxShape.circle
+            ? BorderRadius.circular(999)
+            : BorderRadius.circular(borderRadius),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
           child: Container(
             padding: padding,
             decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.9),
+              color: Theme.of(context)
+                  .extension<AppCustomColors>()!
+                  .inkColor
+                  .withValues(alpha: 0.92),
               shape: shape,
-              borderRadius: shape == BoxShape.circle ? null : BorderRadius.circular(borderRadius),
+              borderRadius: shape == BoxShape.circle
+                  ? null
+                  : BorderRadius.circular(borderRadius),
               border: Border.all(
-                color: Colors.white.withOpacity(0.15),
+                color: Colors.white.withValues(alpha: 0.10),
                 width: 1.0,
               ),
             ),

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:project_flutter/model/event.dart';
 import 'package:project_flutter/screens/login_page.dart';
 import 'package:project_flutter/screens/visited_place_screen.dart';
 import 'package:project_flutter/service/supabase_data.dart';
 import 'package:project_flutter/theme/theme.dart';
-import 'package:project_flutter/widgets/status_badge.dart';
+import 'package:project_flutter/widgets/app_ui.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -20,56 +21,68 @@ class EventDetailsScreen extends StatefulWidget {
 class _EventDetailsScreenState extends State<EventDetailsScreen> {
   @override
   Widget build(BuildContext context) {
-    return Directionality(
-      textDirection: TextDirection.rtl, // دعم اللغة العربية بشكل افتراضي
-      child: Scaffold(
-        backgroundColor: const Color(0xFFFAF9F6), // لون الخلفية العام
-        body: Column(
-          children: [
-            // المنطقة 1 - معرض الصور
-            _ImageGallerySection(event: widget.event),
+    final colors = appColors(context);
 
-            // المحتوى القابل للتمرير
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 24,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // المنطقة 2 - معلومات أساسية
-                    _HeaderInfoSection(event: widget.event),
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light,
+      child: Directionality(
+        textDirection: TextDirection.rtl,
+        child: Scaffold(
+          backgroundColor: colors.creamBackground,
+          body: Column(
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // المنطقة 1 - معرض الصور
+                      _ImageGallerySection(event: widget.event),
 
-                    const SizedBox(height: 24),
+                      // لوحة المحتوى تتداخل قليلاً مع الصورة
+                      Transform.translate(
+                        offset: const Offset(0, -28),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: colors.creamBackground,
+                            borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(32),
+                            ),
+                          ),
+                          padding: const EdgeInsets.fromLTRB(20, 26, 20, 8),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // المنطقة 2 - معلومات أساسية
+                              _HeaderInfoSection(event: widget.event),
+                              const SizedBox(height: 26),
 
-                    // المنطقة 3 - أوقات العمل والأيام
-                    _WorkingHoursSection(event: widget.event),
+                              // المنطقة 3 - أوقات العمل والأيام
+                              _WorkingHoursSection(event: widget.event),
+                              const SizedBox(height: 26),
 
-                    const SizedBox(height: 24),
+                              // المنطقة 4 - الوصف الكامل
+                              _DescriptionSection(event: widget.event),
 
-                    // المنطقة 4 - الوصف الكامل
-                    _DescriptionSection(event: widget.event),
+                              // المنطقة 5 - مربع الموقع
+                              _LocationBoxSection(event: widget.event),
 
-                    // ==============================
-                    // المنطقة 5 - مربع الموقع (مضاف حديثاً)
-                    // ==============================
-                    _LocationBoxSection(event: widget.event),
-
-                    const SizedBox(height: 16),
-                    _VisitedPlaceButton(event: widget.event),
-
-                    // مسافة إضافية في الأسفل لتجنب تغطية الزر السفلي
-                    const SizedBox(height: 80),
-                  ],
+                              const SizedBox(height: 14),
+                              _VisitedPlaceButton(event: widget.event),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
 
-            // المنطقة السادسة - زر الحجز (ثابت في الأسفل)
-            _BookNowButton(event: widget.event),
-          ],
+              // المنطقة 6 - زر الحجز (ثابت في الأسفل)
+              _BookNowButton(event: widget.event),
+            ],
+          ),
         ),
       ),
     );
@@ -77,7 +90,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
 }
 
 // ==========================================
-// المنطقة 1: معرض الصور (Image Gallery)
+// المنطقة 1: معرض الصور
 // ==========================================
 class _ImageGallerySection extends StatefulWidget {
   final Event event;
@@ -123,211 +136,156 @@ class _ImageGallerySectionState extends State<_ImageGallerySection> {
     }
   }
 
+  Future<void> _toggleFavorite() async {
+    final wasFavorite = _isFavorite;
+    setState(() => _isFavorite = !wasFavorite);
+
+    try {
+      if (wasFavorite) {
+        await SupabaseData().removeFavorite(widget.event.id);
+      } else {
+        await SupabaseData().addFavorite(widget.event.id);
+      }
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _isFavorite = wasFavorite);
+      final isUnauthenticated = error.toString().toLowerCase().contains(
+        'logged in',
+      );
+      if (isUnauthenticated) {
+        _showLoginSnackBar(context, 'يجب تسجيل الدخول للحفظ في المفضلة');
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('تعذر تحديث المفضلة: $error'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        // PageView للصور
-        SizedBox(
-          height: 320, // ارتفاع المعرض
-          width: double.infinity,
-          child: PageView.builder(
-            itemCount: _images.length,
-            onPageChanged: (index) {
-              setState(() {
-                _currentIndex = index;
-              });
-            },
-            itemBuilder: (context, index) {
-              return Image.network(
-                _images[index],
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => Container(
-                  color: Colors.grey[300],
-                  child: const Icon(
-                    Icons.broken_image,
-                    size: 50,
-                    color: Colors.grey,
+    final colors = appColors(context);
+
+    return SizedBox(
+      height: 380,
+      width: double.infinity,
+      child: Stack(
+        children: [
+          // PageView للصور
+          Positioned.fill(
+            child: PageView.builder(
+              itemCount: _images.length,
+              onPageChanged: (index) {
+                setState(() {
+                  _currentIndex = index;
+                });
+              },
+              itemBuilder: (context, index) {
+                return Image.network(
+                  _images[index],
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    color: colors.inkSoft,
+                    child: Icon(
+                      Icons.image_not_supported_rounded,
+                      size: 48,
+                      color: Colors.white.withValues(alpha: 0.3),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+
+          // تدرّج علوي لوضوح الأزرار وتدرّج سفلي لعمق الصورة
+          Positioned.fill(
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.55),
+                      Colors.transparent,
+                      Colors.transparent,
+                      Colors.black.withValues(alpha: 0.35),
+                    ],
+                    stops: const [0.0, 0.32, 0.65, 1.0],
                   ),
                 ),
-              );
-            },
-          ),
-        ),
-
-        // تدرج لوني علوي لتحسين وضوح الأزرار
-        Positioned(
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 100,
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Colors.black.withOpacity(0.5), Colors.transparent],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
               ),
             ),
           ),
-        ),
 
-        // زر الرجوع (يمين - بسبب RTL)
-        Positioned(
-          top: 48,
-          right: 20,
-          child: GestureDetector(
-            onTap: () => Navigator.pop(context),
-            child: Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 8,
-                  ),
-                ],
-              ),
-              child: const Icon(
-                Icons.arrow_back_rounded,
-                size: 20,
-                color: Colors.black,
-              ),
-            ),
-          ),
-        ),
-
-        // زر المفضلة (يسار)
-        Positioned(
-          top: 48,
-          left: 20,
-          child: Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8),
-              ],
-            ),
-            child: IconButton(
-              onPressed: _isCheckingFavorite
-                  ? null
-                  : () async {
-                      final wasFavorite = _isFavorite;
-                      setState(() => _isFavorite = !wasFavorite);
-
-                      try {
-                        if (wasFavorite) {
-                          await SupabaseData().removeFavorite(widget.event.id);
-                        } else {
-                          await SupabaseData().addFavorite(widget.event.id);
-                        }
-                      } catch (error) {
-                        if (!mounted) return;
-                        setState(() => _isFavorite = wasFavorite);
-                        final isUnauthenticated = error
-                            .toString()
-                            .toLowerCase()
-                            .contains('logged in');
-                        if (isUnauthenticated) {
-                          final messenger = ScaffoldMessenger.of(context);
-                          messenger
-                            ..clearSnackBars()
-                            ..showSnackBar(
-                              SnackBar(
-                                content: Row(
-                                  children: [
-                                    const Expanded(
-                                      child: Text(
-                                        'يجب تسجيل الدخول للحفظ في المفضلة',
-                                        maxLines: 2,
-                                        style: TextStyle(fontSize: 14),
-                                      ),
-                                    ),
-                                    TextButton(
-                                      onPressed: () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (_) => const LoginPage(),
-                                          ),
-                                        );
-                                      },
-                                      style: TextButton.styleFrom(
-                                        foregroundColor: Colors.amberAccent,
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                        ),
-                                        minimumSize: Size.zero,
-                                        tapTargetSize:
-                                            MaterialTapTargetSize.shrinkWrap,
-                                      ),
-                                      child: const Text(
-                                        'تسجيل الدخول الآن',
-                                        style: TextStyle(fontSize: 13),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                duration: const Duration(seconds: 3),
-                                behavior: SnackBarBehavior.floating,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
-                                ),
-                              ),
-                            );
-                          Future<void>.delayed(const Duration(seconds: 3), () {
-                            if (mounted) messenger.hideCurrentSnackBar();
-                          });
-                        } else {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('تعذر تحديث المفضلة: $error'),
-                              duration: const Duration(seconds: 3),
-                            ),
-                          );
-                        }
-                      }
-                    },
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints.tightFor(width: 20, height: 20),
-              icon: Icon(
-                _isFavorite
-                    ? Icons.favorite_rounded
-                    : Icons.favorite_border_rounded,
-                size: 20,
-                color: Colors.black,
-              ),
-            ),
-          ),
-        ),
-
-        // مؤشر عدد الصور (يسار أسفل الصورة)
-        if (_images.length > 1)
-          Positioned(
-            bottom: 16,
-            left: 20,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.6),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                '${_currentIndex + 1}/${_images.length}',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
+          // الأزرار العلوية
+          PositionedDirectional(
+            top: 0,
+            start: 0,
+            end: 0,
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 8,
+                ),
+                child: Row(
+                  children: [
+                    AppCircleButton(
+                      icon: Icons.arrow_forward_rounded,
+                      tooltip: 'رجوع',
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                    const Spacer(),
+                    AppCircleButton(
+                      icon: _isFavorite
+                          ? Icons.favorite_rounded
+                          : Icons.favorite_border_rounded,
+                      iconColor: _isFavorite
+                          ? const Color(0xFFFF5A76)
+                          : Colors.white,
+                      tooltip: _isFavorite
+                          ? 'إزالة من المفضلة'
+                          : 'حفظ في المفضلة',
+                      onPressed: _isCheckingFavorite ? null : _toggleFavorite,
+                    ),
+                  ],
                 ),
               ),
             ),
           ),
-      ],
+
+          // مؤشر الصور
+          if (_images.length > 1)
+            Positioned(
+              bottom: 44,
+              left: 0,
+              right: 0,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(_images.length, (index) {
+                  final active = index == _currentIndex;
+                  return AnimatedContainer(
+                    duration: const Duration(milliseconds: 250),
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    width: active ? 22 : 7,
+                    height: 7,
+                    decoration: BoxDecoration(
+                      color: active
+                          ? colors.goldColor
+                          : Colors.white.withValues(alpha: 0.55),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  );
+                }),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -339,80 +297,139 @@ class _HeaderInfoSection extends StatelessWidget {
   final Event event;
   const _HeaderInfoSection({required this.event});
 
+  String get _priceText {
+    if (event.isFree ?? false) return 'مجاني';
+    final min = event.priceMin;
+    final max = event.priceMax;
+    if (min != null && max != null && max > min) {
+      return '${min.toStringAsFixed(0)} – ${max.toStringAsFixed(0)} ر.س';
+    }
+    return 'من ${min?.toStringAsFixed(0) ?? 0} ر.س';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final bool isFree = event.isFree ?? false;
     final bool requiresRegistration = event.isRegistrationRequired ?? false;
-    final theme = Theme.of(context);
-    final customColors = theme.extension<AppCustomColors>()!;
+    final colors = appColors(context);
+    final hasCategory = event.sCategory != null && event.sCategory!.isNotEmpty;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (hasCategory) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: colors.accentColorSoft,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              event.sCategory!,
+              style: TextStyle(
+                color: colors.accentColor,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+        ],
+        Text(
+          event.title ?? 'عنوان المكان غير متوفر',
+          style: AppTheme.display(26, color: colors.textPrimary, height: 1.3),
+        ),
+        if (event.shortDescription != null &&
+            event.shortDescription!.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Text(
+            event.shortDescription!,
+            style: Theme.of(context).textTheme.bodyMedium
+                ?.copyWith(fontSize: 13.5),
+          ),
+        ],
+        const SizedBox(height: 18),
         Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    event.title ?? 'عنوان المكان غير متوفر',
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    event.sCategory ?? 'تصنيف غير محدد',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: customColors.accentColor,
-                    ),
-                  ),
-                ],
+              child: _FactTile(
+                icon: Icons.confirmation_number_rounded,
+                label: 'السعر',
+                value: _priceText,
+                highlight: event.isFree ?? false,
               ),
-              // ... نفس النص السابق للعنوان والتصنيف ...
             ),
-            const SizedBox(width: 16),
-            StatusBadge(
-              text: isFree
-                  ? 'مجاني'
-                  : 'من ${event.priceMin?.toStringAsFixed(0) ?? 0} ر.س',
-              backgroundColor: customColors.accentColorSoft,
-              textColor: customColors.accentColor, // البرتقالي الفاتح الزجاجي
+            const SizedBox(width: 12),
+            Expanded(
+              child: _FactTile(
+                icon: requiresRegistration
+                    ? Icons.how_to_reg_rounded
+                    : Icons.event_available_rounded,
+                label: 'الحجز',
+                value: requiresRegistration ? 'يتطلب حجز' : 'لا يتطلب حجز',
+              ),
             ),
           ],
         ),
-        const SizedBox(height: 16),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: customColors.accentColorSoft, // برتقالي داكن وصلب
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                requiresRegistration
-                    ? Icons.how_to_reg_rounded
-                    : Icons.event_available_rounded,
-                size: 16,
-                color: Colors.black,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                requiresRegistration ? 'يتطلب حجز' : 'لا يتطلب حجز',
-                style: const TextStyle(
-                  color: Colors.black,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                ), // نص أسود عريض
-              ),
-            ],
-          ),
-        ),
       ],
+    );
+  }
+}
+
+class _FactTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final bool highlight;
+
+  const _FactTile({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.highlight = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = appColors(context);
+
+    return AppSurfaceCard(
+      radius: 20,
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        children: [
+          AppIconMedallion(
+            icon: icon,
+            size: 38,
+            color: highlight ? colors.accentColorDeep : colors.accentColor,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: colors.textMuted,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: colors.textPrimary,
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -424,68 +441,146 @@ class _WorkingHoursSection extends StatelessWidget {
   final Event event;
   const _WorkingHoursSection({required this.event});
 
+  /// يقسّم "الأيام: الأوقات" إلى صفوف منظّمة.
+  List<(String?, String)> _rows(String text) {
+    return text.split('\n').where((line) => line.trim().isNotEmpty).map((line) {
+      final separator = line.indexOf(': ');
+      if (separator == -1) return (null, line.trim());
+      return (
+        line.substring(0, separator).trim(),
+        line.substring(separator + 2).trim(),
+      );
+    }).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final customColors = theme.extension<AppCustomColors>()!;
-
-    final String workingHoursText =
-        event.formattedWorkingHoursArabic ?? 'أوقات العمل غير متوفرة';
+    final colors = appColors(context);
+    final workingHours = event.formattedWorkingHoursArabic;
     final hasClosedDays = event.closedDays?.isNotEmpty == true;
+    final rows = workingHours == null
+        ? const <(String?, String)>[]
+        : _rows(workingHours);
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        // الخلفية برتقالية شفافة كما طلبت
-        color: customColors.solidDarkOrange.withOpacity(0.8),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const AppSectionTitle(title: 'أوقات العمل'),
+        const SizedBox(height: 14),
+        AppSurfaceCard(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          child: Column(
             children: [
-              // الأيقونة برتقالية
-              Icon(
-                Icons.access_time_filled_rounded,
-                color: customColors.accentColor,
-                size: 24,
-              ),
-              const SizedBox(width: 12),
-              const Text(
-                'أوقات وساعات العمل',
-                style: TextStyle(
-                  color: Colors.black,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
+              if (rows.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.schedule_rounded,
+                        color: colors.textMuted,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        'أوقات العمل غير متوفرة',
+                        style: TextStyle(
+                          color: colors.textMuted,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
+              for (var i = 0; i < rows.length; i++) ...[
+                if (i > 0) Divider(height: 1, color: colors.borderSoft),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.schedule_rounded,
+                        color: colors.accentColor,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 10),
+                      if (rows[i].$1 != null) ...[
+                        Expanded(
+                          child: Text(
+                            rows[i].$1!,
+                            style: TextStyle(
+                              color: colors.textPrimary,
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                      ],
+                      Flexible(
+                        flex: rows[i].$1 == null ? 1 : 0,
+                        child: Text(
+                          rows[i].$2,
+                          textAlign: rows[i].$1 == null
+                              ? TextAlign.start
+                              : TextAlign.end,
+                          style: TextStyle(
+                            color: rows[i].$2 == 'مغلق'
+                                ? AppTheme.errorColor
+                                : colors.textMuted,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              if (hasClosedDays) ...[
+                Divider(height: 1, color: colors.borderSoft),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppTheme.errorColor.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.event_busy_rounded,
+                              size: 15,
+                              color: AppTheme.errorColor,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              event.formattedClosedDaysArabic!,
+                              style: const TextStyle(
+                                color: AppTheme.errorColor,
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
-          const SizedBox(height: 16),
-          // جميع النصوص باللون الأسود
-          Text(
-            workingHoursText,
-            style: const TextStyle(
-              color: Colors.black,
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
-            ),
-          ),
-          if (hasClosedDays) ...[
-            const SizedBox(height: 8),
-            Text(
-              event.formattedClosedDaysArabic!,
-              style: const TextStyle(
-                color: Colors.black,
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-              ),
-            ),
-          ],
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -499,17 +594,23 @@ class _DescriptionSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = appColors(context);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Divider(), // سيأخذ الستايل تلقائياً من الثيم
-        Text('عن المكان', style: Theme.of(context).textTheme.titleLarge),
+        const AppSectionTitle(title: 'عن المكان'),
         const SizedBox(height: 12),
         Text(
           event.fullDescription ??
               event.shortDescription ??
               'لا يوجد وصف متاح.',
-          style: Theme.of(context).textTheme.bodyMedium,
+          style: TextStyle(
+            color: colors.textPrimary.withValues(alpha: 0.82),
+            fontSize: 14.5,
+            height: 1.9,
+            fontWeight: FontWeight.w500,
+          ),
         ),
       ],
     );
@@ -517,7 +618,7 @@ class _DescriptionSection extends StatelessWidget {
 }
 
 // ==========================================
-// المنطقة 5: مربع الموقع (Location Box)
+// المنطقة 5: مربع الموقع
 // ==========================================
 class _LocationBoxSection extends StatelessWidget {
   final Event event;
@@ -550,57 +651,87 @@ class _LocationBoxSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (event.lat == null || event.lng == null) return const SizedBox.shrink();
+    final colors = appColors(context);
 
     return Padding(
-      padding: const EdgeInsets.only(top: 24),
+      padding: const EdgeInsets.only(top: 26),
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.black, // أسود صلب تماماً (No Glass)
-          borderRadius: BorderRadius.circular(20),
+          gradient: colors.inkGradient,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: colors.shadowColor.withValues(alpha: 0.18),
+              blurRadius: 20,
+              offset: const Offset(0, 10),
+            ),
+          ],
         ),
-        child: InkWell(
-          onTap: () => _launchLocation(context),
-          borderRadius: BorderRadius.circular(20),
-          child: const Padding(
-            padding: EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.location_on_rounded,
-                  color: Colors.white,
-                  size: 28,
-                ), // أيقونة بيضاء
-                SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'موقع المكان',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        'اضغط لعرض الموقع على الخريطة',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => _launchLocation(context),
+              child: Stack(
+                children: [
+                  PositionedDirectional(
+                    top: -50,
+                    end: -40,
+                    child: AppGlowBlob(color: colors.accentColor, size: 160),
                   ),
-                ),
-                Icon(
-                  Icons.arrow_forward_ios_rounded,
-                  size: 16,
-                  color: Colors.white54,
-                ),
-              ],
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 50,
+                          height: 50,
+                          decoration: BoxDecoration(
+                            gradient: colors.accentGradient,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: const Icon(
+                            Icons.map_rounded,
+                            color: Colors.white,
+                            size: 26,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'موقع المكان',
+                                style: AppTheme.display(
+                                  17,
+                                  color: Colors.white,
+                                  height: 1.3,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'اضغط لعرض الموقع على الخريطة',
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.6),
+                                  fontWeight: FontWeight.w500,
+                                  fontSize: 12.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(
+                          Icons.chevron_left_rounded,
+                          size: 26,
+                          color: colors.goldColor,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -616,48 +747,7 @@ class _VisitedPlaceButton extends StatelessWidget {
 
   Future<void> _openDialog(BuildContext context) async {
     if (Supabase.instance.client.auth.currentUser == null) {
-      final messenger = ScaffoldMessenger.of(context);
-      messenger
-        ..clearSnackBars()
-        ..showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    'يجب تسجيل الدخول لحفظ الزيارة',
-                    maxLines: 2,
-                    style: TextStyle(fontSize: 14),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const LoginPage()),
-                    );
-                  },
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.amberAccent,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  child: const Text(
-                    'تسجيل الدخول الآن',
-                    style: TextStyle(fontSize: 13),
-                  ),
-                ),
-              ],
-            ),
-            duration: const Duration(seconds: 3),
-            behavior: SnackBarBehavior.floating,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          ),
-        );
-      Future<void>.delayed(const Duration(seconds: 3), () {
-        if (context.mounted) messenger.hideCurrentSnackBar();
-      });
+      _showLoginSnackBar(context, 'يجب تسجيل الدخول لحفظ الزيارة');
       return;
     }
 
@@ -669,12 +759,57 @@ class _VisitedPlaceButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      child: OutlinedButton.icon(
-        onPressed: () => _openDialog(context),
-        icon: const Icon(Icons.check_circle_outline_rounded),
-        label: const Text('سجل المكان كمكان مُزار'),
+    final colors = appColors(context);
+
+    return Material(
+      color: colors.surfaceColor,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: () => _openDialog(context),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: colors.accentColorDeep.withValues(alpha: 0.45),
+            ),
+          ),
+          child: Row(
+            children: [
+              AppIconMedallion(
+                icon: Icons.verified_rounded,
+                color: colors.accentColorDeep,
+                size: 40,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'زرت هذا المكان؟',
+                      style: TextStyle(
+                        color: colors.textPrimary,
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Text(
+                      'سجّله كمكان مُزار مع ملاحظاتك',
+                      style: TextStyle(
+                        color: colors.textMuted,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.add_rounded, color: colors.accentColorDeep),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -740,48 +875,88 @@ class _BookNowButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = appColors(context);
+    final isFree = event.isFree ?? false;
+
     return Container(
-      padding: const EdgeInsets.only(left: 20, right: 20, top: 16, bottom: 32),
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colors.surfaceColor,
+        border: Border(top: BorderSide(color: colors.borderSoft)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, -5),
+            color: colors.shadowColor.withValues(alpha: 0.06),
+            blurRadius: 20,
+            offset: const Offset(0, -6),
           ),
         ],
       ),
       child: SafeArea(
         top: false,
-        child: SizedBox(
-          width: double.infinity,
-          height: 56,
-          child: ElevatedButton(
-            // تم مسح الألوان اليدوية من هنا ليعتمد على الثيم!
-            onPressed: () => _launchAction(context),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+        child: Row(
+          children: [
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _hasTicketUrl ? 'للحجز' : 'الموقع',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+                  isFree ? 'الدخول' : 'يبدأ من',
+                  style: TextStyle(
+                    color: colors.textMuted,
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-                const SizedBox(width: 8),
-                Icon(
-                  _hasTicketUrl
-                      ? Icons.arrow_forward_rounded
-                      : Icons.location_on_rounded,
-                  size: 20,
+                Text(
+                  isFree
+                      ? 'مجاني'
+                      : '${event.priceMin?.toStringAsFixed(0) ?? 0} ر.س',
+                  style: AppTheme.display(
+                    20,
+                    color: colors.textPrimary,
+                    height: 1.3,
+                  ),
                 ),
               ],
             ),
-          ),
+            const SizedBox(width: 18),
+            Expanded(
+              child: AppGradientButton(
+                label: _hasTicketUrl ? 'احجز الآن' : 'افتح الموقع',
+                icon: _hasTicketUrl
+                    ? Icons.arrow_back_rounded
+                    : Icons.location_on_rounded,
+                onPressed: () => _launchAction(context),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
+}
+
+void _showLoginSnackBar(BuildContext context, String message) {
+  final messenger = ScaffoldMessenger.of(context);
+  messenger
+    ..clearSnackBars()
+    ..showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 3),
+        action: SnackBarAction(
+          label: 'تسجيل الدخول',
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const LoginPage()),
+            );
+          },
+        ),
+      ),
+    );
+  // الرسائل ذات الإجراء لا تختفي تلقائياً، لذا نخفيها يدوياً
+  Future<void>.delayed(const Duration(seconds: 3), () {
+    if (context.mounted) messenger.hideCurrentSnackBar();
+  });
 }
