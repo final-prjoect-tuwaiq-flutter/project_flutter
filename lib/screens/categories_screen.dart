@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:project_flutter/pages/event_details.dart';
+import 'package:project_flutter/screens/event_details.dart';
 import 'package:project_flutter/theme/theme.dart';
-import 'package:project_flutter/widget/status_badge.dart';
+import 'package:project_flutter/widgets/status_badge.dart';
 import 'package:project_flutter/widgets/glass_container.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:project_flutter/model/catagory_model.dart';
+import 'package:project_flutter/model/category_model.dart';
 import 'package:project_flutter/model/event.dart';
 import 'package:project_flutter/service/location.dart'; // استيراد ملف الموقع
 import 'package:project_flutter/screens/account.dart';
-
-import 'sign_up_page.dart';
+import 'package:project_flutter/screens/add_place_screen.dart';
 
 class CategoriesScreen extends StatefulWidget {
   const CategoriesScreen({super.key});
@@ -29,8 +28,23 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
   bool _isSortingByNearest = false; // هل تم تفعيل الترتيب؟
   bool _isLoadingLocation = false; // هل يجري تحديد الموقع الآن؟
   Map<int, double> _distancesCache = {}; // خزن المسافات لتجنب إعادة الحساب
+  int _sortRequestId = 0;
 
   final supabase = Supabase.instance.client;
+
+  late final Future<List<Category>> _categoriesFuture;
+  Future<List<Event>>? _eventsFuture;
+  List<Event>? _loadedEvents;
+
+  @override
+  void initState() {
+    super.initState();
+    _categoriesFuture = _fetchCategories();
+    _eventsFuture = _fetchAllEvents();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _sortByNearest();
+    });
+  }
 
   // جلب التصنيفات
   Future<List<Category>> _fetchCategories() async {
@@ -38,8 +52,8 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
     return response.map((json) => Category.fromJson(json)).toList();
   }
 
-  // جلب الفعاليات بناءً على التصنيف المختار
-   // جلب الفعاليات بناءً على التصنيف المختار
+  // جلب الأماكن بناءً على التصنيف المختار
+  // جلب الأماكن بناءً على التصنيف المختار
   Future<List<Event>> _fetchEvents(int categoryId) async {
     final response = await supabase
         .from('events3') // تم التغيير من events إلى events3
@@ -48,21 +62,31 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
     return response.map((json) => Event.fromJson(json)).toList();
   }
 
+  Future<List<Event>> _fetchAllEvents() async {
+    final response = await supabase.from('events3').select();
+    return response.map((json) => Event.fromJson(json)).toList();
+  }
+
   // ==========================================
   // دالة تفعيل الترتيب حسب الأقرب
   // ==========================================
   Future<void> _sortByNearest() async {
     // منع الاستدعاء المتكرر أثناء التحميل
-    if (_isLoadingLocation || _selectedCategoryId == null) return;
+    if (_isLoadingLocation) return;
 
+    final requestId = ++_sortRequestId;
     setState(() => _isLoadingLocation = true);
 
     try {
       // 1. جلب الموقع
       final position = await determinePosition();
 
-      // 2. جلب الفعاليات مباشرة بدل الاعتماد على FutureBuilder
-      final events = await _fetchEvents(_selectedCategoryId!);
+      // 2. جلب الأماكن مباشرة بدل الاعتماد على FutureBuilder
+      final events = _selectedCategoryId == null
+          ? await _fetchAllEvents()
+          : await _fetchEvents(_selectedCategoryId!);
+
+      if (!mounted || requestId != _sortRequestId) return;
 
       // 3. حساب المسافات وتخزينها في الـ Cache
       final Map<int, double> newDistances = {};
@@ -84,6 +108,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
         _isLoadingLocation = false;
       });
     } catch (e) {
+      if (!mounted || requestId != _sortRequestId) return;
       setState(() => _isLoadingLocation = false);
 
       // عرض الخطأ الحقيقي + رسالة واضحة
@@ -122,7 +147,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
   }
 
   // ==========================================
-  // دالة ترتيب الفعاليات حسب المسافة
+  // دالة ترتيب الأماكن حسب المسافة
   // ==========================================
   List<Event> _getSortedEvents(List<Event> events) {
     if (!_isSortingByNearest || _distancesCache.isEmpty) return events;
@@ -134,11 +159,11 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
       if (_distancesCache.containsKey(event.id)) {
         withLocation.add(event);
       } else {
-        withoutLocation.add(event); // الفعاليات بدون موقع تُوضع في النهاية
+        withoutLocation.add(event); // الأماكن بدون موقع تُوضع في النهاية
       }
     }
 
-    // ترتيب الفعاليات التي لها موقع من الأقرب للأبعد
+    // ترتيب الأماكن التي لها موقع من الأقرب للأبعد
     withLocation.sort((a, b) {
       final distA = _distancesCache[a.id] ?? double.maxFinite;
       final distB = _distancesCache[b.id] ?? double.maxFinite;
@@ -151,7 +176,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
   // ==========================================
   // دالة تنسيق عرض المسافة
   // ==========================================
-   // ==========================================
+  // ==========================================
   // دالة تنسيق عرض المسافة (محدثة)
   // ==========================================
   String _formatDistance(double distanceInKm) {
@@ -164,6 +189,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
       return 'يبعد عنك ${distanceInKm.toStringAsFixed(1)} كم';
     }
   }
+
   // ==========================================
   // إعادة ضبط حالة الترتيب عند تغيير التصنيف
   // ==========================================
@@ -188,7 +214,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                 child: Padding(
                   padding: const EdgeInsets.only(top: 16, bottom: 8),
                   child: FutureBuilder<List<Category>>(
-                    future: _fetchCategories(),
+                    future: _categoriesFuture,
                     builder: (context, snapshot) {
                       if (snapshot.connectionState == ConnectionState.waiting) {
                         return const Center(
@@ -218,7 +244,11 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                           setState(() {
                             _selectedCategoryId = category.id;
                             _selectedCategoryName = category.name;
-                            _resetSortState(); // إعادة ضبط الترتيب عند اختيار تصنيف جديد
+                            _eventsFuture = _fetchEvents(category.id);
+                            _loadedEvents = null;
+                            _sortRequestId++;
+                            _isLoadingLocation = false;
+                            _resetSortState();
                           });
                         },
                       );
@@ -227,35 +257,29 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                 ),
               ),
 
-              // 2. عنوان القسم وزر "الأقرب"
-              if (_selectedCategoryName != null)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 12,
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'فعاليات: $_selectedCategoryName',
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF1E1E24),
-                          ),
+              // 2. عنوان الأماكن المرتبة حسب القرب
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 12,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        _selectedCategoryName ?? 'الأقرب',
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1E1E24),
                         ),
-                        // ==========================================
-                        // زر "الأقرب" مع حالة التحميل
-                        // ==========================================
-                        // جديد ✅ (بدون FutureBuilder، بدون تمرير events)
+                      ),
+                      if (_selectedCategoryId != null)
                         GestureDetector(
-                          onTap: _isLoadingLocation
-                              ? null
-                              : () => _sortByNearest(),
+                          onTap: _isLoadingLocation ? null : _sortByNearest,
                           child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 250),
+                            duration: const Duration(milliseconds: 200),
                             padding: const EdgeInsets.symmetric(
                               horizontal: 14,
                               vertical: 8,
@@ -270,143 +294,90 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                                     ? const Color(0xFF191D21)
                                     : Colors.grey.shade300,
                               ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.04),
-                                  blurRadius: 8,
-                                ),
-                              ],
                             ),
-                            child: _isLoadingLocation
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.grey,
-                                    ),
-                                  )
-                                : Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.near_me_rounded,
-                                        size: 16,
-                                        color: _isSortingByNearest
-                                            ? Colors.white
-                                            : Colors.black87,
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Text(
-                                        'الأقرب',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.bold,
-                                          color: _isSortingByNearest
-                                              ? Colors.white
-                                              : Colors.black87,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-              // 3. قسم الفعاليات
-              if (_selectedCategoryId == null)
-                const SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.touch_app_outlined,
-                          size: 55,
-                          color: Colors.grey,
-                        ),
-                        SizedBox(height: 12),
-                        Text(
-                          'الرجاء اختيار تصنيف من الأعلى\nلعرض الفعاليات الخاصة به',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey,
-                            height: 1.5,
-                          ),
-                        ),
-                        SizedBox(height: 80),
-                      ],
-                    ),
-                  ),
-                )
-              else
-                FutureBuilder<List<Event>>(
-                  future: _fetchEvents(_selectedCategoryId!),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const SliverToBoxAdapter(
-                        child: Padding(
-                          padding: EdgeInsets.all(40.0),
-                          child: Center(child: CircularProgressIndicator()),
-                        ),
-                      );
-                    }
-
-                    if (snapshot.hasError) {
-                      return SliverToBoxAdapter(
-                        child: Center(
-                          child: Text('حدث خطأ: ${snapshot.error}'),
-                        ),
-                      );
-                    }
-
-                    final rawEvents = snapshot.data ?? [];
-
-                    if (rawEvents.isEmpty) {
-                      return const SliverToBoxAdapter(
-                        child: Padding(
-                          padding: EdgeInsets.all(40.0),
-                          child: Center(
                             child: Text(
-                              'لا توجد فعاليات مسجلة لهذا التصنيف',
+                              'ترتيب حسب الأقرب',
                               style: TextStyle(
-                                fontSize: 15,
-                                color: Colors.grey,
+                                color: _isSortingByNearest
+                                    ? Colors.white
+                                    : Colors.black87,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
                               ),
                             ),
                           ),
                         ),
-                      );
-                    }
+                    ],
+                  ),
+                ),
+              ),
 
-                    // تطبيق الترتيب إذا كان مفعلاً
-                    final sortedEvents = _getSortedEvents(rawEvents);
+              // 3. قسم الأماكن
+              FutureBuilder<List<Event>>(
+                future: _eventsFuture,
+                builder: (context, snapshot) {
+                  if (_isLoadingLocation) {
+                    return const SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: Center(child: CircularProgressIndicator()),
+                    );
+                  }
 
-                    return SliverPadding(
-                      padding: const EdgeInsets.only(bottom: 110),
-                      sliver: SliverList(
-                        delegate: SliverChildBuilderDelegate((context, index) {
-                          final event = sortedEvents[index];
-                          final distanceKm = _distancesCache[event.id];
-
-                          return EventCard(
-                            event: event,
-                            // تمرير المسافة فقط إذا كانت محسوبة ومفعلة
-                            distanceText:
-                                (_isSortingByNearest && distanceKm != null)
-                                ? _formatDistance(distanceKm)
-                                : null,
-                          );
-                        }, childCount: sortedEvents.length),
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.all(40.0),
+                        child: Center(child: CircularProgressIndicator()),
                       ),
                     );
-                  },
-                ),
+                  }
+
+                  if (snapshot.hasError) {
+                    return SliverToBoxAdapter(
+                      child: Center(child: Text('حدث خطأ: ${snapshot.error}')),
+                    );
+                  }
+
+                  if (snapshot.hasData) _loadedEvents = snapshot.data!;
+                  final rawEvents = snapshot.data ?? _loadedEvents ?? [];
+
+                  if (rawEvents.isEmpty) {
+                    return const SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.all(40.0),
+                        child: Center(
+                          child: Text(
+                            'لا توجد أماكن مسجلة لهذا التصنيف',
+                            style: TextStyle(fontSize: 15, color: Colors.grey),
+                          ),
+                        ),
+                      ),
+                    );
+                  }
+
+                  // تطبيق الترتيب إذا كان مفعلاً
+                  final sortedEvents = _getSortedEvents(rawEvents);
+
+                  return SliverPadding(
+                    padding: const EdgeInsets.only(bottom: 110),
+                    sliver: SliverList(
+                      delegate: SliverChildBuilderDelegate((context, index) {
+                        final event = sortedEvents[index];
+                        final distanceKm = _distancesCache[event.id];
+
+                        return EventCard(
+                          event: event,
+                          // تمرير المسافة فقط إذا كانت محسوبة ومفعلة
+                          distanceText:
+                              (_isSortingByNearest && distanceKm != null)
+                              ? _formatDistance(distanceKm)
+                              : null,
+                        );
+                      }, childCount: sortedEvents.length),
+                    ),
+                  );
+                },
+              ),
             ],
           ),
         ),
@@ -420,11 +391,18 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                 _currentIndex = 0;
                 _selectedCategoryId = null;
                 _selectedCategoryName = null;
+                _eventsFuture = _fetchAllEvents();
+                _loadedEvents = null;
+                _sortRequestId++;
+                _isLoadingLocation = false;
                 _resetSortState();
               });
             } else if (index == 1) {
-              _showLogoutDialog(context);
-            } else if (index == 3) {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (_) => const AddPlaceScreen()),
+              );
+            } else if (index == 2) {
               Navigator.pushReplacement(
                 context,
                 MaterialPageRoute(builder: (_) => const AccountScreen()),
@@ -432,64 +410,6 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
             }
           },
         ),
-      ),
-    );
-  }
-
-  void _showLogoutDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
-          children: [
-            Icon(Icons.logout_rounded, color: Colors.red),
-            SizedBox(width: 8),
-            Text(
-              'تسجيل الخروج',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-            ),
-          ],
-        ),
-        content: const Text(
-          'هل أنت متأكد من رغبتك في تسجيل الخروج من الحساب؟',
-          style: TextStyle(fontSize: 15),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text(
-              'إلغاء',
-              style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold),
-            ),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            onPressed: () async {
-              Navigator.pop(context);
-              await Supabase.instance.client.auth.signOut();
-              if (context.mounted) {
-                Navigator.pushAndRemoveUntil(
-                  context,
-                  MaterialPageRoute(builder: (_) => const SignUpPage()),
-                  (route) => false,
-                );
-              }
-            },
-            child: const Text(
-              'تأكيد الخروج',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -504,7 +424,10 @@ class CategoriesHeaderContainer extends StatelessWidget {
   final ValueChanged<Category> onCategorySelected;
 
   const CategoriesHeaderContainer({
-    super.key, required this.categories, required this.selectedCategoryId, required this.onCategorySelected,
+    super.key,
+    required this.categories,
+    required this.selectedCategoryId,
+    required this.onCategorySelected,
   });
 
   IconData _getIconForCategory(String name) {
@@ -512,7 +435,8 @@ class CategoriesHeaderContainer extends StatelessWidget {
     if (name.contains('ترفيه')) return Icons.local_activity_rounded;
     if (name.contains('رياض')) return Icons.sports_soccer_rounded;
     if (name.contains('مؤتمر')) return Icons.business_center_rounded;
-    if (name.contains('تخييم') || name.contains('طبيع')) return Icons.landscape_rounded;
+    if (name.contains('تخييم') || name.contains('طبيع'))
+      return Icons.landscape_rounded;
     return Icons.category_rounded;
   }
 
@@ -520,12 +444,14 @@ class CategoriesHeaderContainer extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final customColors = theme.extension<AppCustomColors>()!;
-    
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
       decoration: BoxDecoration(
-        color: customColors.solidDarkOrange.withOpacity(0.9), // الحاوية الأساسية رمادي داكن
+        color: customColors.solidDarkOrange.withOpacity(
+          0.9,
+        ), // الحاوية الأساسية رمادي داكن
         borderRadius: BorderRadius.circular(24),
       ),
       child: Wrap(
@@ -545,14 +471,16 @@ class CategoriesHeaderContainer extends StatelessWidget {
                   height: 58,
                   decoration: BoxDecoration(
                     // الخلفية برتقالية صلبة إذا كان محدداً، وبدون لون إذا لم يكن
-                    color: isSelected ? customColors.accentColor : Colors.transparent,
+                    color: isSelected
+                        ? customColors.accentColor
+                        : Colors.transparent,
                     shape: BoxShape.circle,
                   ),
                   child: Center(
                     child: Icon(
                       _getIconForCategory(category.name),
                       // الأيقونة سوداء إذا كان محدداً، وإلا بيضاء شفافة
-                      color: isSelected ? Colors.white : Colors.white70, 
+                      color: isSelected ? Colors.white : Colors.white70,
                       size: 26,
                     ),
                   ),
@@ -575,11 +503,12 @@ class CategoriesHeaderContainer extends StatelessWidget {
     );
   }
 }
+
 // ==========================================
-// كرت الفعالية (محدث - يستقبل distanceText)
+// كرت المكان (محدث - يستقبل distanceText)
 // ==========================================
 // ==========================================
-// كرت الفعالية (محدث)
+// كرت المكان (محدث)
 // ==========================================
 class EventCard extends StatelessWidget {
   final Event event;
@@ -615,23 +544,36 @@ class EventCard extends StatelessWidget {
                   fit: BoxFit.cover,
                   errorBuilder: (context, error, stackTrace) => Container(
                     color: theme.colorScheme.surfaceVariant,
-                    child: Icon(Icons.broken_image, color: theme.colorScheme.onSurface.withOpacity(0.5), size: 40),
+                    child: Icon(
+                      Icons.broken_image,
+                      color: theme.colorScheme.onSurface.withOpacity(0.5),
+                      size: 40,
+                    ),
                   ),
                 ),
               ),
             ),
-            
+
             if (distanceText != null) ...[
               const SizedBox(height: 12),
               Row(
                 children: [
-                  Icon(Icons.location_on, size: 16, color: theme.colorScheme.onSurface.withOpacity(0.5)),
+                  Icon(
+                    Icons.location_on,
+                    size: 16,
+                    color: theme.colorScheme.onSurface.withOpacity(0.5),
+                  ),
                   const SizedBox(width: 4),
-                  Text(distanceText!, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface.withOpacity(0.6))),
+                  Text(
+                    distanceText!,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurface.withOpacity(0.6),
+                    ),
+                  ),
                 ],
               ),
             ],
-            
+
             const SizedBox(height: 10),
 
             Row(
@@ -641,10 +583,21 @@ class EventCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(event.title ?? 'بدون عنوان', maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleLarge),
-                      if (event.shortDescription != null && event.shortDescription!.isNotEmpty) ...[
+                      Text(
+                        event.title ?? 'بدون عنوان',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleLarge,
+                      ),
+                      if (event.shortDescription != null &&
+                          event.shortDescription!.isNotEmpty) ...[
                         const SizedBox(height: 4),
-                        Text(event.shortDescription!, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall),
+                        Text(
+                          event.shortDescription!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall,
+                        ),
                       ],
                     ],
                   ),
@@ -664,13 +617,25 @@ class EventCard extends StatelessWidget {
                   const SizedBox(width: 12),
                 ],
                 GestureDetector(
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => EventDetailsScreen(event: event))),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => EventDetailsScreen(event: event),
+                    ),
+                  ),
                   child: Container(
                     width: 44,
                     height: 44,
                     // الزر الأسود يعبر عن العمل الرئيسي
-                    decoration: BoxDecoration(color: customColors.accentColor, shape: BoxShape.circle),
-                    child: Icon(Icons.arrow_forward_rounded, color: theme.colorScheme.onPrimary, size: 20),
+                    decoration: BoxDecoration(
+                      color: customColors.accentColor,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.arrow_forward_rounded,
+                      color: theme.colorScheme.onPrimary,
+                      size: 20,
+                    ),
                   ),
                 ),
               ],
@@ -681,6 +646,7 @@ class EventCard extends StatelessWidget {
     );
   }
 }
+
 // ==========================================
 // البوتوم ناف بار العائم (بدون تعديل)
 // ==========================================
@@ -696,6 +662,8 @@ class FloatingBottomNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final customColors = Theme.of(context).extension<AppCustomColors>()!;
+
     return Container(
       margin: const EdgeInsets.only(left: 40, right: 40, bottom: 24),
       // استخدمنا GlassContainer هنا
@@ -706,14 +674,35 @@ class FloatingBottomNavBar extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
             _buildNavItem(context, 0, Icons.home_rounded, 'الرئيسية'),
-            _buildNavItem(context, 1, Icons.person_rounded, 'حسابي'),
+            GestureDetector(
+              onTap: () => onTap(1),
+              child: Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: customColors.accentColor,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.add_rounded,
+                  color: Colors.white,
+                  size: 30,
+                ),
+              ),
+            ),
+            _buildNavItem(context, 2, Icons.person_rounded, 'حسابي'),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildNavItem(BuildContext context, int index, IconData icon, String label) {
+  Widget _buildNavItem(
+    BuildContext context,
+    int index,
+    IconData icon,
+    String label,
+  ) {
     final isSelected = currentIndex == index;
     final theme = Theme.of(context);
     final customColors = theme.extension<AppCustomColors>()!;

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:project_flutter/pages/categories_screen.dart';
-import 'package:project_flutter/pages/login_page.dart';
+import 'package:project_flutter/screens/categories_screen.dart';
+import 'package:project_flutter/screens/login_page.dart';
 import 'package:project_flutter/service/supabase_data.dart';
 import 'package:project_flutter/theme/theme.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -76,9 +76,8 @@ class SignUpController {
 
   void _showError(BuildContext context, String message) {
     // يعتمد الشكل والألوان على SnackBarTheme في theme.dart تلقائياً
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 }
 
@@ -109,9 +108,7 @@ class _SignUpPageState extends State<SignUpPage> {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: theme.colorScheme.surface,
-        appBar: AppBar(
-          leading: const SizedBox.shrink(),
-        ),
+        appBar: AppBar(leading: const SizedBox.shrink()),
         body: SafeArea(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 24.0),
@@ -126,7 +123,9 @@ class _SignUpPageState extends State<SignUpPage> {
                       children: [
                         Text(
                           'أنشئ حسابك في المعزب',
-                          style: theme.textTheme.titleLarge?.copyWith(fontSize: 26),
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            fontSize: 26,
+                          ),
                           textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: 8),
@@ -174,7 +173,8 @@ class _SignUpPageState extends State<SignUpPage> {
                           color: theme.colorScheme.onSurface.withOpacity(0.5),
                         ),
                         onPressed: () => setState(
-                          () => _controller.isPasswordVisible = !_controller.isPasswordVisible,
+                          () => _controller.isPasswordVisible =
+                              !_controller.isPasswordVisible,
                         ),
                       ),
                     ),
@@ -200,7 +200,8 @@ class _SignUpPageState extends State<SignUpPage> {
                           color: theme.colorScheme.onSurface.withOpacity(0.5),
                         ),
                         onPressed: () => setState(
-                          () => _controller.isConfirmPasswordVisible = !_controller.isConfirmPasswordVisible,
+                          () => _controller.isConfirmPasswordVisible =
+                              !_controller.isConfirmPasswordVisible,
                         ),
                       ),
                     ),
@@ -223,19 +224,27 @@ class _SignUpPageState extends State<SignUpPage> {
                               );
                               if (success && context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('تم إنشاء الحساب بنجاح!')),
+                                  const SnackBar(
+                                    content: Text('تم إنشاء الحساب بنجاح!'),
+                                  ),
                                 );
                                 Navigator.pushReplacement(
                                   context,
-                                  MaterialPageRoute(builder: (_) => const CategoriesScreen()),
+                                  MaterialPageRoute(
+                                    builder: (_) => const CategoriesScreen(),
+                                  ),
                                 );
                               }
                             },
                       child: _controller.isLoading
-                          ? CircularProgressIndicator(color: theme.colorScheme.onPrimary)
+                          ? CircularProgressIndicator(
+                              color: theme.colorScheme.onPrimary,
+                            )
                           : Text(
                               'إنشاء الحساب',
-                              style: theme.textTheme.titleMedium?.copyWith(color: Colors.white),
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                color: Colors.white,
+                              ),
                             ),
                     ),
                   ),
@@ -246,12 +255,17 @@ class _SignUpPageState extends State<SignUpPage> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text('لديك حساب بالفعل؟', style: theme.textTheme.bodyMedium),
+                      Text(
+                        'لديك حساب بالفعل؟',
+                        style: theme.textTheme.bodyMedium,
+                      ),
                       TextButton(
                         onPressed: () {
                           Navigator.pushReplacement(
                             context,
-                            MaterialPageRoute(builder: (_) => const LoginPage()),
+                            MaterialPageRoute(
+                              builder: (_) => const LoginPage(),
+                            ),
                           );
                         },
                         child: Text(

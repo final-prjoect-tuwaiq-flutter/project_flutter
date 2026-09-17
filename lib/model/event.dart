@@ -7,10 +7,10 @@ class Event {
   final String? fullDescription;
   final String? coverImageUrl;
   final String? thumbnailUrl;
-  
-  final String? startAt; 
+
+  final String? startAt;
   final String? endAt;
-  
+
   final bool? isFree;
   final double? priceMin;
   final double? priceMax;
@@ -49,15 +49,129 @@ class Event {
   // --- دالة ترجمة الأيام من الإنجليزية للعربية ---
   String _translateDay(String day) {
     switch (day.toLowerCase().trim()) {
-      case 'sun': return 'الأحد';
-      case 'mon': return 'الاثنين';
-      case 'tue': return 'الثلاثاء';
-      case 'wed': return 'الأربعاء';
-      case 'thu': return 'الخميس';
-      case 'fri': return 'الجمعة';
-      case 'sat': return 'السبت';
-      default: return day;
+      case '0':
+      case 'sun':
+        return 'الأحد';
+      case '1':
+      case 'mon':
+        return 'الاثنين';
+      case '2':
+      case 'tue':
+        return 'الثلاثاء';
+      case '3':
+      case 'wed':
+        return 'الأربعاء';
+      case '4':
+      case 'thu':
+        return 'الخميس';
+      case '5':
+      case 'fri':
+        return 'الجمعة';
+      case '6':
+      case 'sat':
+        return 'السبت';
+      default:
+        return day;
     }
+  }
+
+  int? _dayIndex(String day) {
+    switch (day.toLowerCase().trim()) {
+      case '0':
+      case 'sun':
+      case 'الأحد':
+        return 0;
+      case '1':
+      case 'mon':
+      case 'الاثنين':
+        return 1;
+      case '2':
+      case 'tue':
+      case 'الثلاثاء':
+        return 2;
+      case '3':
+      case 'wed':
+      case 'الأربعاء':
+        return 3;
+      case '4':
+      case 'thu':
+      case 'الخميس':
+        return 4;
+      case '5':
+      case 'fri':
+      case 'الجمعة':
+        return 5;
+      case '6':
+      case 'sat':
+      case 'السبت':
+        return 6;
+      default:
+        return null;
+    }
+  }
+
+  String _formatDayGroup(List<String> days) {
+    final sortedDays = days.toSet().toList()
+      ..sort((first, second) {
+        final firstIndex = _dayIndex(first) ?? 7;
+        final secondIndex = _dayIndex(second) ?? 7;
+        return firstIndex.compareTo(secondIndex);
+      });
+
+    final ranges = <String>[];
+    var rangeStart = 0;
+
+    for (var index = 1; index <= sortedDays.length; index++) {
+      final isConsecutive =
+          index < sortedDays.length &&
+          (_dayIndex(sortedDays[index]) ?? -1) ==
+              (_dayIndex(sortedDays[index - 1]) ?? -2) + 1;
+
+      if (isConsecutive) continue;
+
+      final rangeLength = index - rangeStart;
+      if (rangeLength >= 3) {
+        ranges.add('من ${sortedDays[rangeStart]} إلى ${sortedDays[index - 1]}');
+      } else if (rangeLength == 2 &&
+          (_dayIndex(sortedDays[rangeStart + 1]) ?? -1) ==
+              (_dayIndex(sortedDays[rangeStart]) ?? -2) + 1) {
+        ranges.add('${sortedDays[rangeStart]} و ${sortedDays[index - 1]}');
+      } else {
+        ranges.add(sortedDays.sublist(rangeStart, index).join('، '));
+      }
+      rangeStart = index;
+    }
+
+    return ranges.join('، ');
+  }
+
+  String _formatScheduleValue(dynamic value) {
+    final text = value.toString().trim();
+    if (!RegExp(r'[-–—]').hasMatch(text)) return text;
+
+    final intervals = text
+        .split(RegExp(r'[,،;]'))
+        .map((interval) => interval.trim())
+        .where((interval) => interval.isNotEmpty)
+        .toList();
+
+    intervals.sort((first, second) {
+      final firstStart = first.split(RegExp(r'[-–—]')).first.trim();
+      final secondStart = second.split(RegExp(r'[-–—]')).first.trim();
+      return firstStart.compareTo(secondStart);
+    });
+
+    final formattedIntervals = intervals.map((interval) {
+      final parts = interval.trim().split(RegExp(r'[-–—]'));
+      if (parts.length < 2) return interval.trim();
+
+      final start = _formatTime(parts[0].replaceAll(' ', ''));
+      final end = _formatTime(parts[1].replaceAll(' ', ''));
+      if (start == end) return 'مغلق';
+      return 'من $start إلى $end';
+    }).toList();
+
+    return formattedIntervals.join('، ');
   }
 
   // --- جلب أوقات العمل مترجمة ومرتبة ---
@@ -66,26 +180,36 @@ class Event {
 
     if (times!.length == 1 && times!.containsKey('times')) {
       final t = times!['times'].toString().trim();
-      if (t.contains('-')) {
-        final parts = t.split('-');
-        return 'من ${_formatTime(parts[0].trim())} إلى ${_formatTime(parts[1].trim())}';
+      final formattedSchedule = _formatScheduleValue(t);
+      if (closedDays?.isNotEmpty != true) {
+        return 'من الأحد إلى السبت: $formattedSchedule';
       }
-      return t;
+      return formattedSchedule;
     }
-    
-    List<String> results = [];
+
+    final grouped = <String, List<String>>{};
     times!.forEach((key, value) {
-      final translatedDay = _translateDay(key.toString()); // هنا يتم استخدام دالة الترجمة
-      final valStr = value.toString().trim();
-      
-      if (valStr.contains('-')) {
-        final parts = valStr.split('-');
-        results.add('$translatedDay: من ${_formatTime(parts[0].trim())} إلى ${_formatTime(parts[1].trim())}');
-      } else {
-        results.add('$translatedDay: $valStr');
-      }
+      final translatedDay = _translateDay(key.toString());
+      final formattedValue = _formatScheduleValue(value);
+      grouped.putIfAbsent(formattedValue, () => []).add(translatedDay);
     });
-    return results.join('\n');
+
+    final sortedGroups = grouped.entries.toList()
+      ..sort((first, second) {
+        final firstDay = first.value
+            .map(_dayIndex)
+            .whereType<int>()
+            .fold(7, (min, value) => value < min ? value : min);
+        final secondDay = second.value
+            .map(_dayIndex)
+            .whereType<int>()
+            .fold(7, (min, value) => value < min ? value : min);
+        return firstDay.compareTo(secondDay);
+      });
+
+    return sortedGroups
+        .map((entry) => '${_formatDayGroup(entry.value)}: ${entry.key}')
+        .join('\n');
   }
 
   // --- جلب أيام الإغلاق مترجمة ---
@@ -93,12 +217,15 @@ class Event {
     if (closedDays == null || closedDays!.isEmpty) {
       return 'لا توجد أيام إغلاق';
     }
-    const daysMap = {
-      0: 'الأحد', 1: 'الاثنين', 2: 'الثلاثاء', 
-      3: 'الأربعاء', 4: 'الخميس', 5: 'الجمعة', 6: 'السبت'
-    };
-    final names = closedDays!.map((d) => daysMap[d as int] ?? '').where((s) => s.isNotEmpty).join('، ');
-    return names;
+
+    final names = closedDays!
+        .map((day) => _translateDay(day.toString()))
+        .where((day) => _dayIndex(day) != null)
+        .toSet()
+        .toList();
+
+    if (names.isEmpty) return 'لا توجد أيام إغلاق';
+    return '${_formatDayGroup(names)} مغلق';
   }
 
   Event({
@@ -136,8 +263,12 @@ class Event {
       startAt: json['start_at']?.toString(),
       endAt: json['end_at']?.toString(),
       isFree: json['is_free'] as bool?,
-      priceMin: json['price_min'] != null ? (json['price_min'] as num).toDouble() : null,
-      priceMax: json['price_max'] != null ? (json['price_max'] as num).toDouble() : null,
+      priceMin: json['price_min'] != null
+          ? (json['price_min'] as num).toDouble()
+          : null,
+      priceMax: json['price_max'] != null
+          ? (json['price_max'] as num).toDouble()
+          : null,
       isRegistrationRequired: json['is_registration_required'] as bool?,
       temp: json['temp'] as bool?,
       ticketUrl: json['ticket_url'] as String?,
@@ -146,7 +277,7 @@ class Event {
       lng: (json['lng'] as num?)?.toDouble(),
       mCategory: json['m_category']?.toString(),
       url: "https://www.google.com/maps/place/${json['lat']},${json['lng']}",
-      
+
       // التعديل هنا لقراءة البيانات بشكل صحيح من Supabase
       closedDays: _parseClosedDays(json['closed_days']),
       times: _parseTimes(json['times']),
@@ -165,7 +296,10 @@ class Event {
       } on FormatException {}
       return {'times': text};
     }
-    if (value is Map) return value.map((key, time) => MapEntry(key.toString(), time.toString()));
+    if (value is Map)
+      return value.map(
+        (key, time) => MapEntry(key.toString(), time.toString()),
+      );
     return null;
   }
 

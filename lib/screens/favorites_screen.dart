@@ -1,18 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:project_flutter/model/event.dart';
-import 'package:project_flutter/pages/categories_screen.dart';
+import 'package:project_flutter/screens/categories_screen.dart';
+import 'package:project_flutter/screens/account.dart';
+import 'package:project_flutter/screens/add_place_screen.dart';
 import 'package:project_flutter/service/supabase_data.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-class TestScreen extends StatefulWidget {
-  const TestScreen({super.key});
+class FavoritesScreen extends StatefulWidget {
+  const FavoritesScreen({super.key});
 
   @override
-  State<TestScreen> createState() => _TestScreenState();
+  State<FavoritesScreen> createState() => _FavoritesScreenState();
 }
 
-class _TestScreenState extends State<TestScreen> {
-  int _currentIndex = 3;
+class _FavoritesScreenState extends State<FavoritesScreen> {
+  int _currentIndex = 2;
   late Future<List<Event>> _favoritesFuture;
 
   @override
@@ -49,6 +51,16 @@ class _TestScreenState extends State<TestScreen> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const CategoriesScreen()),
+      );
+    } else if (index == 1) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const AddPlaceScreen()),
+      );
+    } else if (index == 2) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const AccountScreen()),
       );
     }
   }
@@ -90,10 +102,8 @@ class _TestScreenState extends State<TestScreen> {
                     const SliverToBoxAdapter(child: _FavoritesHeader()),
                     SliverList(
                       delegate: SliverChildBuilderDelegate(
-                        (context, index) => EventCard(
-                          event: events[index],
-                          showPrice: false,
-                        ),
+                        (context, index) =>
+                            EventCard(event: events[index], showPrice: false),
                         childCount: events.length,
                       ),
                     ),
@@ -166,7 +176,7 @@ class _FavoritesHeader extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            'الأماكن والفعاليات التي اخترتها لك لاحقاً',
+            'الأماكن التي اخترتها لك لاحقاً',
             style: TextStyle(
               color: Colors.grey[600],
               fontSize: 14,
@@ -205,7 +215,11 @@ class _EmptyFavoritesView extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.favorite_border_rounded, size: 72, color: Colors.grey[400]),
+                  Icon(
+                    Icons.favorite_border_rounded,
+                    size: 72,
+                    color: Colors.grey[400],
+                  ),
                   const SizedBox(height: 16),
                   const Text(
                     'لا توجد عناصر في المفضلة بعد',
@@ -217,7 +231,7 @@ class _EmptyFavoritesView extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'اضغط على القلب لحفظ الفعاليات التي تعجبك',
+                    'اضغط على القلب لحفظ الأماكن التي تعجبك',
                     style: TextStyle(color: Colors.grey[600], fontSize: 14),
                   ),
                 ],

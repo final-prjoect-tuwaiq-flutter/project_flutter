@@ -1,10 +1,10 @@
 ﻿import 'package:flutter/material.dart';
-import 'package:project_flutter/pages/categories_screen.dart';
+import 'package:project_flutter/screens/categories_screen.dart';
 import 'package:project_flutter/service/supabase_data.dart';
 import 'package:project_flutter/theme/theme.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'sign_up_page.dart';
+import 'package:project_flutter/screens/sign_up_page.dart';
 
 // ==========================================
 // 1. الكنترولر الخاص بصفحة تسجيل الدخول
@@ -68,9 +68,8 @@ class LoginController {
 
   void _showError(BuildContext context, String message) {
     // يعتمد الشكل والألوان على SnackBarTheme في theme.dart تلقائياً
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 }
 
@@ -123,12 +122,14 @@ class _LoginPageState extends State<LoginPage> {
                         const SizedBox(height: 16),
                         Text(
                           'مرحباً بك في المعزب!',
-                          style: theme.textTheme.titleLarge?.copyWith(fontSize: 26),
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            fontSize: 26,
+                          ),
                           textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'سجل دخولك الآن وتابع فعالياتك المفضلة',
+                          'سجل دخولك الآن وتابع أماكنك المفضلة',
                           style: theme.textTheme.bodyMedium,
                           textAlign: TextAlign.center,
                         ),
@@ -243,8 +244,9 @@ class _LoginPageState extends State<LoginPage> {
                             )
                           : Text(
                               'تسجيل الدخول',
-                              style: theme.textTheme.titleMedium
-                                  ?.copyWith(color: Colors.white),
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                color: Colors.white,
+                              ),
                             ),
                     ),
                   ),
@@ -318,8 +320,11 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   // ويدجت زر السوشيال ميديا - ألوانه من الثيم
-  Widget _socialButton(BuildContext context, IconData icon,
-      {double iconSize = 24}) {
+  Widget _socialButton(
+    BuildContext context,
+    IconData icon, {
+    double iconSize = 24,
+  }) {
     final theme = Theme.of(context);
     return Container(
       width: 50,
@@ -327,13 +332,11 @@ class _LoginPageState extends State<LoginPage> {
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         shape: BoxShape.circle,
-        border:
-            Border.all(color: theme.dividerTheme.color ?? Colors.grey.shade300),
+        border: Border.all(
+          color: theme.dividerTheme.color ?? Colors.grey.shade300,
+        ),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-          ),
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8),
         ],
       ),
       child: Center(

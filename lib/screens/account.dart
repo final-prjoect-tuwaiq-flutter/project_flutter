@@ -1,10 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:project_flutter/screens/auth_test.dart';
-import 'package:project_flutter/screens/test.dart';
-import 'package:project_flutter/pages/categories_screen.dart';
+import 'package:project_flutter/screens/favorites_screen.dart';
+import 'package:project_flutter/screens/categories_screen.dart';
+import 'package:project_flutter/screens/login_page.dart';
+import 'package:project_flutter/screens/add_place_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:project_flutter/widgets/app_bottom_nav_bar.dart';
 
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
@@ -36,7 +38,7 @@ class _AccountScreenState extends State<AccountScreen> {
   Future<void> _openAuth() async {
     await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const AuthTestScreen()),
+      MaterialPageRoute(builder: (_) => const LoginPage()),
     );
     if (mounted) setState(() {});
   }
@@ -114,7 +116,7 @@ class _AccountScreenState extends State<AccountScreen> {
               _AccountTile(
                 icon: Icons.favorite_rounded,
                 title: 'مفضلتي',
-                subtitle: 'الفعاليات التي حفظتها',
+                subtitle: 'الأماكن التي حفظتها',
                 color: const Color(0xFFFF4B6E),
                 onTap: () {
                   if (!isSignedIn) {
@@ -123,7 +125,7 @@ class _AccountScreenState extends State<AccountScreen> {
                   }
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => const TestScreen()),
+                    MaterialPageRoute(builder: (_) => const FavoritesScreen()),
                   );
                 },
               ),
@@ -159,13 +161,18 @@ class _AccountScreenState extends State<AccountScreen> {
             ],
           ),
         ),
-        bottomNavigationBar: _AccountBottomNavBar(
-          currentIndex: 3,
+        bottomNavigationBar: AppBottomNavBar(
+          currentIndex: 2,
           onTap: (index) {
             if (index == 0) {
               Navigator.pushReplacement(
                 context,
                 MaterialPageRoute(builder: (_) => const CategoriesScreen()),
+              );
+            } else if (index == 1) {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (_) => const AddPlaceScreen()),
               );
             }
           },
@@ -333,78 +340,6 @@ class _AccountTile extends StatelessWidget {
                     ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _AccountBottomNavBar extends StatelessWidget {
-  final int currentIndex;
-  final ValueChanged<int> onTap;
-
-  const _AccountBottomNavBar({required this.currentIndex, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(left: 24, right: 24, bottom: 24),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(35),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          _buildItem(0, Icons.home_rounded, 'الرئيسية'),
-          _buildItem(1, Icons.explore_rounded, 'استكشف'),
-          _buildItem(2, Icons.calendar_today_rounded, 'الفعاليات'),
-          _buildItem(3, Icons.person_rounded, 'حسابي'),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildItem(int index, IconData icon, String label) {
-    final isSelected = currentIndex == index;
-    return GestureDetector(
-      onTap: () => onTap(index),
-      behavior: HitTestBehavior.opaque,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFFF4B6E) : Colors.transparent,
-          borderRadius: BorderRadius.circular(30),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              color: isSelected ? Colors.white : Colors.black54,
-              size: 22,
-            ),
-            if (isSelected) ...[
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                ),
-              ),
-            ],
-          ],
         ),
       ),
     );
