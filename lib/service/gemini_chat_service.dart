@@ -6,8 +6,6 @@ import 'package:project_flutter/model/category_model.dart';
 import 'package:project_flutter/model/event.dart';
 import 'package:project_flutter/service/supabase_data.dart';
 
-/// خدمة المساعد الذكي: تجهّز سياق كامل عن الأماكن المتوفرة في التطبيق
-/// (والمفضلة لدى المستخدم) ثم تحادث Gemini للحصول على توصيات مخصصة.
 class GeminiChatService {
   GeminiChatService._internal();
 
@@ -22,7 +20,6 @@ class GeminiChatService {
 
   bool get isReady => _isReady;
 
-  /// يجهّز جلسة محادثة جديدة مع سياق كامل عن الأماكن والمفضلة.
   Future<void> startNewSession() async {
     final apiKey = dotenv.env['GEMINI_API_KEY'];
     if (apiKey == null || apiKey.trim().isEmpty) {
