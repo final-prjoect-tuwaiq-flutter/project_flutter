@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:project_flutter/model/event.dart';
+import 'package:project_flutter/screens/login_page.dart';
+import 'package:project_flutter/screens/visited_place_screen.dart';
+import 'package:project_flutter/service/supabase_data.dart';
 import 'package:project_flutter/theme/theme.dart';
-import 'package:project_flutter/widget/status_badge.dart';
-import 'package:project_flutter/widgets/glass_container.dart';
+import 'package:project_flutter/widgets/status_badge.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class EventDetailsScreen extends StatefulWidget {
@@ -54,6 +57,9 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                     // ==============================
                     _LocationBoxSection(event: widget.event),
 
+                    const SizedBox(height: 16),
+                    _VisitedPlaceButton(event: widget.event),
+
                     // مسافة إضافية في الأسفل لتجنب تغطية الزر السفلي
                     const SizedBox(height: 80),
                   ],
@@ -84,6 +90,8 @@ class _ImageGallerySection extends StatefulWidget {
 
 class _ImageGallerySectionState extends State<_ImageGallerySection> {
   int _currentIndex = 0;
+  bool _isFavorite = false;
+  bool _isCheckingFavorite = true;
   late final List<String> _images;
 
   @override
@@ -97,6 +105,21 @@ class _ImageGallerySectionState extends State<_ImageGallerySection> {
     // إذا لم يكن هناك صور، نضع صورة افتراضية
     if (_images.isEmpty) {
       _images.add('https://via.placeholder.com/600x400?text=لا+توجد+صورة');
+    }
+    _loadFavoriteStatus();
+  }
+
+  Future<void> _loadFavoriteStatus() async {
+    try {
+      final favorites = await SupabaseData().fetchFavorites();
+      if (!mounted) return;
+      setState(() {
+        _isFavorite = favorites.contains(widget.event.id);
+        _isCheckingFavorite = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isCheckingFavorite = false);
     }
   }
 
@@ -189,10 +212,96 @@ class _ImageGallerySectionState extends State<_ImageGallerySection> {
                 BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8),
               ],
             ),
-            child: const Icon(
-              Icons.favorite_border_rounded,
-              size: 20,
-              color: Colors.black,
+            child: IconButton(
+              onPressed: _isCheckingFavorite
+                  ? null
+                  : () async {
+                      final wasFavorite = _isFavorite;
+                      setState(() => _isFavorite = !wasFavorite);
+
+                      try {
+                        if (wasFavorite) {
+                          await SupabaseData().removeFavorite(widget.event.id);
+                        } else {
+                          await SupabaseData().addFavorite(widget.event.id);
+                        }
+                      } catch (error) {
+                        if (!mounted) return;
+                        setState(() => _isFavorite = wasFavorite);
+                        final isUnauthenticated = error
+                            .toString()
+                            .toLowerCase()
+                            .contains('logged in');
+                        if (isUnauthenticated) {
+                          final messenger = ScaffoldMessenger.of(context);
+                          messenger
+                            ..clearSnackBars()
+                            ..showSnackBar(
+                              SnackBar(
+                                content: Row(
+                                  children: [
+                                    const Expanded(
+                                      child: Text(
+                                        'يجب تسجيل الدخول للحفظ في المفضلة',
+                                        maxLines: 2,
+                                        style: TextStyle(fontSize: 14),
+                                      ),
+                                    ),
+                                    TextButton(
+                                      onPressed: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) => const LoginPage(),
+                                          ),
+                                        );
+                                      },
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: Colors.amberAccent,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                        ),
+                                        minimumSize: Size.zero,
+                                        tapTargetSize:
+                                            MaterialTapTargetSize.shrinkWrap,
+                                      ),
+                                      child: const Text(
+                                        'تسجيل الدخول الآن',
+                                        style: TextStyle(fontSize: 13),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                duration: const Duration(seconds: 3),
+                                behavior: SnackBarBehavior.floating,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                              ),
+                            );
+                          Future<void>.delayed(const Duration(seconds: 3), () {
+                            if (mounted) messenger.hideCurrentSnackBar();
+                          });
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('تعذر تحديث المفضلة: $error'),
+                              duration: const Duration(seconds: 3),
+                            ),
+                          );
+                        }
+                      }
+                    },
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 20, height: 20),
+              icon: Icon(
+                _isFavorite
+                    ? Icons.favorite_rounded
+                    : Icons.favorite_border_rounded,
+                size: 20,
+                color: Colors.black,
+              ),
             ),
           ),
         ),
@@ -248,13 +357,17 @@ class _HeaderInfoSection extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    event.title ?? 'عنوان الفعالية غير متوفر',
-                    style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                    event.title ?? 'عنوان المكان غير متوفر',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     event.sCategory ?? 'تصنيف غير محدد',
-                    style: theme.textTheme.bodyMedium?.copyWith(color: customColors.accentColor),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: customColors.accentColor,
+                    ),
                   ),
                 ],
               ),
@@ -262,7 +375,9 @@ class _HeaderInfoSection extends StatelessWidget {
             ),
             const SizedBox(width: 16),
             StatusBadge(
-              text: isFree ? 'مجاني' : 'من ${event.priceMin?.toStringAsFixed(0) ?? 0} ر.س',
+              text: isFree
+                  ? 'مجاني'
+                  : 'من ${event.priceMin?.toStringAsFixed(0) ?? 0} ر.س',
               backgroundColor: customColors.accentColorSoft,
               textColor: customColors.accentColor, // البرتقالي الفاتح الزجاجي
             ),
@@ -278,11 +393,21 @@ class _HeaderInfoSection extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(requiresRegistration ? Icons.how_to_reg_rounded : Icons.event_available_rounded, size: 16, color: Colors.black),
+              Icon(
+                requiresRegistration
+                    ? Icons.how_to_reg_rounded
+                    : Icons.event_available_rounded,
+                size: 16,
+                color: Colors.black,
+              ),
               const SizedBox(width: 6),
               Text(
                 requiresRegistration ? 'يتطلب حجز' : 'لا يتطلب حجز',
-                style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 13), // نص أسود عريض
+                style: const TextStyle(
+                  color: Colors.black,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ), // نص أسود عريض
               ),
             ],
           ),
@@ -291,6 +416,7 @@ class _HeaderInfoSection extends StatelessWidget {
     );
   }
 }
+
 // ==========================================
 // المنطقة 3: أوقات العمل والأيام
 // ==========================================
@@ -302,9 +428,10 @@ class _WorkingHoursSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final customColors = theme.extension<AppCustomColors>()!;
-    
-    final String workingHoursText = event.formattedWorkingHoursArabic ?? 'أوقات العمل غير متوفرة';
-    final String closedDaysText = event.formattedClosedDaysArabic ?? 'لا توجد أيام إغلاق';
+
+    final String workingHoursText =
+        event.formattedWorkingHoursArabic ?? 'أوقات العمل غير متوفرة';
+    final hasClosedDays = event.closedDays?.isNotEmpty == true;
 
     return Container(
       width: double.infinity,
@@ -312,7 +439,7 @@ class _WorkingHoursSection extends StatelessWidget {
       decoration: BoxDecoration(
         // الخلفية برتقالية شفافة كما طلبت
         color: customColors.solidDarkOrange.withOpacity(0.8),
-        borderRadius: BorderRadius.circular(20), 
+        borderRadius: BorderRadius.circular(20),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -320,21 +447,49 @@ class _WorkingHoursSection extends StatelessWidget {
           Row(
             children: [
               // الأيقونة برتقالية
-              Icon(Icons.access_time_filled_rounded, color: customColors.accentColor, size: 24),
+              Icon(
+                Icons.access_time_filled_rounded,
+                color: customColors.accentColor,
+                size: 24,
+              ),
               const SizedBox(width: 12),
-              const Text('أوقات وساعات العمل', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 16)),
+              const Text(
+                'أوقات وساعات العمل',
+                style: TextStyle(
+                  color: Colors.black,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 16),
           // جميع النصوص باللون الأسود
-          Text(workingHoursText, style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14)),
-          const SizedBox(height: 8),
-          Text('أيام الإغلاق: $closedDaysText', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14)),
+          Text(
+            workingHoursText,
+            style: const TextStyle(
+              color: Colors.black,
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
+          if (hasClosedDays) ...[
+            const SizedBox(height: 8),
+            Text(
+              event.formattedClosedDaysArabic!,
+              style: const TextStyle(
+                color: Colors.black,
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 }
+
 // ==========================================
 // المنطقة 4: الوصف الكامل
 // ==========================================
@@ -348,7 +503,7 @@ class _DescriptionSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Divider(), // سيأخذ الستايل تلقائياً من الثيم
-        Text('عن الفعالية', style: Theme.of(context).textTheme.titleLarge),
+        Text('عن المكان', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 12),
         Text(
           event.fullDescription ??
@@ -369,13 +524,33 @@ class _LocationBoxSection extends StatelessWidget {
   const _LocationBoxSection({required this.event});
 
   Future<void> _launchLocation(BuildContext context) async {
-    // الكود الخاص بالانتقال للموقع يبقى كما هو
+    final locationUrl =
+        event.url ??
+        'https://www.google.com/maps/search/?api=1&query=${event.lat},${event.lng}';
+    final uri = Uri.tryParse(locationUrl);
+
+    if (uri == null || !uri.hasScheme || !uri.hasAuthority) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('موقع المكان غير متوفر حالياً')),
+      );
+      return;
+    }
+
+    try {
+      if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+        throw Exception('Unable to launch location');
+      }
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('تعذر فتح موقع المكان')));
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (event.lat == null || event.lng == null || event.url == null) return const SizedBox.shrink();
-    
+    if (event.lat == null || event.lng == null) return const SizedBox.shrink();
+
     return Padding(
       padding: const EdgeInsets.only(top: 24),
       child: Container(
@@ -390,19 +565,41 @@ class _LocationBoxSection extends StatelessWidget {
             padding: EdgeInsets.all(16),
             child: Row(
               children: [
-                Icon(Icons.location_on_rounded, color: Colors.white, size: 28), // أيقونة بيضاء
+                Icon(
+                  Icons.location_on_rounded,
+                  color: Colors.white,
+                  size: 28,
+                ), // أيقونة بيضاء
                 SizedBox(width: 16),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('موقع الفعالية', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                      Text(
+                        'موقع المكان',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
                       SizedBox(height: 4),
-                      Text('اضغط لعرض الموقع على الخريطة', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13)),
+                      Text(
+                        'اضغط لعرض الموقع على الخريطة',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
                     ],
                   ),
                 ),
-                Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Colors.white54),
+                Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 16,
+                  color: Colors.white54,
+                ),
               ],
             ),
           ),
@@ -411,6 +608,78 @@ class _LocationBoxSection extends StatelessWidget {
     );
   }
 }
+
+class _VisitedPlaceButton extends StatelessWidget {
+  final Event event;
+
+  const _VisitedPlaceButton({required this.event});
+
+  Future<void> _openDialog(BuildContext context) async {
+    if (Supabase.instance.client.auth.currentUser == null) {
+      final messenger = ScaffoldMessenger.of(context);
+      messenger
+        ..clearSnackBars()
+        ..showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'يجب تسجيل الدخول لحفظ الزيارة',
+                    maxLines: 2,
+                    style: TextStyle(fontSize: 14),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const LoginPage()),
+                    );
+                  },
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.amberAccent,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text(
+                    'تسجيل الدخول الآن',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+            duration: const Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          ),
+        );
+      Future<void>.delayed(const Duration(seconds: 3), () {
+        if (context.mounted) messenger.hideCurrentSnackBar();
+      });
+      return;
+    }
+
+    await showDialog<bool>(
+      context: context,
+      builder: (_) => VisitedPlaceScreen(event: event),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: () => _openDialog(context),
+        icon: const Icon(Icons.check_circle_outline_rounded),
+        label: const Text('سجل المكان كمكان مُزار'),
+      ),
+    );
+  }
+}
+
 // ==========================================
 // المنطقة 6: زر الحجز
 // ==========================================
@@ -419,24 +688,52 @@ class _BookNowButton extends StatelessWidget {
 
   const _BookNowButton({required this.event});
 
-  Future<void> _launchTicketUrl(BuildContext context) async {
-    final urlString = event.ticketUrl;
-    if (urlString == null || urlString.isEmpty) {
+  bool get _hasTicketUrl {
+    final ticketUri = Uri.tryParse(event.ticketUrl?.trim() ?? '');
+    return ticketUri != null && ticketUri.hasScheme && ticketUri.hasAuthority;
+  }
+
+  Uri? _getActionUri() {
+    final ticketUri = Uri.tryParse(event.ticketUrl?.trim() ?? '');
+    if (_hasTicketUrl) {
+      return ticketUri;
+    }
+
+    if (event.lat == null || event.lng == null) return null;
+
+    final locationUri = Uri.tryParse(
+      event.url ??
+          'https://www.google.com/maps/search/?api=1&query=${event.lat},${event.lng}',
+    );
+    if (locationUri != null &&
+        locationUri.hasScheme &&
+        locationUri.hasAuthority) {
+      return locationUri;
+    }
+
+    return null;
+  }
+
+  Future<void> _launchAction(BuildContext context) async {
+    final url = _getActionUri();
+    if (url == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('رابط الحجز غير متوفر حالياً')),
+        const SnackBar(
+          content: Text('رابط الحجز أو موقع المكان غير متوفر حالياً'),
+        ),
       );
       return;
     }
 
-    final Uri url = Uri.parse(urlString);
     try {
       if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
-        throw 'لا يمكن فتح الرابط';
+        throw Exception('Unable to launch event action');
       }
-    } catch (e) {
+    } catch (_) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('تعذر فتح رابط الحجز')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('تعذر فتح رابط المكان')));
       }
     }
   }
@@ -462,16 +759,24 @@ class _BookNowButton extends StatelessWidget {
           height: 56,
           child: ElevatedButton(
             // تم مسح الألوان اليدوية من هنا ليعتمد على الثيم!
-            onPressed: () => _launchTicketUrl(context),
-            child: const Row(
+            onPressed: () => _launchAction(context),
+            child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
-                  'للحجز',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  _hasTicketUrl ? 'للحجز' : 'الموقع',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-                SizedBox(width: 8),
-                Icon(Icons.arrow_forward_rounded, size: 20),
+                const SizedBox(width: 8),
+                Icon(
+                  _hasTicketUrl
+                      ? Icons.arrow_forward_rounded
+                      : Icons.location_on_rounded,
+                  size: 20,
+                ),
               ],
             ),
           ),

@@ -7,6 +7,9 @@
 .buildlog/
 .history
 
+# Secrets
+.env
+
 
 
 # Flutter repo-specific

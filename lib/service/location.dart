@@ -47,3 +47,13 @@ double distance(double startLatitude, double startLongitude, double endLatitude,
   );
   return (distanceInMeters * 100).round() / 100;
 }
+
+double distancePos(Position start, double endLatitude, double endLongitude) {
+  double distanceInMeters = Geolocator.distanceBetween(
+    start.latitude,
+    start.longitude,
+    endLatitude,
+    endLongitude,
+  );
+  return (distanceInMeters * 100).round() / 100;
+}

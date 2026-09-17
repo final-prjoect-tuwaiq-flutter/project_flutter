@@ -1,0 +1,124 @@
+import 'dart:convert';
+
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:google_generative_ai/google_generative_ai.dart';
+import 'package:project_flutter/model/category_model.dart';
+import 'package:project_flutter/model/event.dart';
+import 'package:project_flutter/service/supabase_data.dart';
+
+class GeminiChatService {
+  GeminiChatService._internal();
+
+  static final GeminiChatService instance = GeminiChatService._internal();
+
+  static const _modelName = 'gemini-3.6-flash';
+
+  final SupabaseData _data = SupabaseData();
+
+  ChatSession? _chatSession;
+  bool _isReady = false;
+
+  bool get isReady => _isReady;
+
+  Future<void> startNewSession() async {
+    final apiKey = dotenv.env['GEMINI_API_KEY'];
+    if (apiKey == null || apiKey.trim().isEmpty) {
+      throw Exception(
+        'لم يتم ضبط مفتاح Gemini API. أضف GEMINI_API_KEY في ملف .env',
+      );
+    }
+
+    final systemPrompt = await _buildSystemPrompt();
+
+    final model = GenerativeModel(
+      model: _modelName,
+      apiKey: apiKey,
+      systemInstruction: Content.system(systemPrompt),
+      generationConfig: GenerationConfig(temperature: 0.6),
+    );
+
+    _chatSession = model.startChat();
+    _isReady = true;
+  }
+
+  Future<String> sendMessage(String text) async {
+    if (_chatSession == null) {
+      await startNewSession();
+    }
+
+    final response = await _chatSession!.sendMessage(Content.text(text));
+    final reply = response.text?.trim();
+    if (reply == null || reply.isEmpty) {
+      return 'عذراً، لم أتمكن من فهم طلبك. هل يمكنك إعادة صياغته؟';
+    }
+    return reply;
+  }
+
+  Future<String> _buildSystemPrompt() async {
+    final results = await Future.wait([
+      _data.getCategories(),
+      _fetchAllPlaces(),
+      _data.fetchFavorites(),
+    ]);
+
+    final categories = results[0] as List<Category>;
+    final places = results[1] as List<Event>;
+    final favoriteIds = results[2] as List<int>;
+
+    final categoryNames = {
+      for (final category in categories) category.id.toString(): category.name,
+    };
+
+    final placesJson = places
+        .map((place) => _placeToContext(place, categoryNames))
+        .toList();
+    final favoritePlaces = places
+        .where((place) => favoriteIds.contains(place.id))
+        .toList();
+    final favoritesJson = favoritePlaces
+        .map((place) => _placeToContext(place, categoryNames))
+        .toList();
+
+    return '''
+أنت "مرشد المعزب"، مساعد ذكي داخل تطبيق "المعزب" لاستكشاف الأماكن والفعاليات.
+مهمتك مساعدة المستخدم على اختيار أفضل مكان يناسبه، بالاعتماد على ميزانيته، اهتماماته، وأماكنه المفضلة.
+
+قواعد مهمة:
+- تحدث دائماً باللغة العربية، بأسلوب ودود ومختصر ومباشر.
+- استخدم فقط الأماكن الموجودة في القائمة أدناه عند تقديم أي توصية. لا تخترع أماكن غير موجودة فيها.
+- إذا لم تكن تعرف ميزانية المستخدم أو نوع الأماكن التي يفضلها، اسأله عنها بلطف قبل أن تقدّم توصية نهائية.
+- عند التوصية بمكان، اذكر اسمه، لماذا يناسبه (السعر/الفئة/القرب من اهتماماته)، وأوقات العمل إن وُجدت.
+- يمكنك اقتراح أكثر من مكان مع ترتيبها حسب الأنسب للمستخدم.
+- إن لم توجد أي أماكن مطابقة لطلب المستخدم، أخبره بذلك بصراحة واقترح أقرب بديل متاح.
+
+قائمة الأماكن المتوفرة حالياً في التطبيق (JSON):
+${jsonEncode(placesJson)}
+
+الأماكن التي أضافها المستخدم إلى المفضلة حالياً (استخدمها لفهم ذوقه وتفضيلاته):
+${favoritesJson.isEmpty ? 'لا توجد أماكن مفضلة بعد.' : jsonEncode(favoritesJson)}
+''';
+  }
+
+  Future<List<Event>> _fetchAllPlaces() async {
+    final supabase = _data.supabase;
+    final response = await supabase.from('events3').select();
+    return response.map((json) => Event.fromJson(json)).toList();
+  }
+
+  Map<String, dynamic> _placeToContext(
+    Event place,
+    Map<String, String> categoryNames,
+  ) {
+    return {
+      'id': place.id,
+      'title': place.title,
+      'description': place.shortDescription,
+      'category': place.sCategory ?? categoryNames[place.mCategory],
+      'is_free': place.isFree,
+      'price_min': place.priceMin,
+      'price_max': place.priceMax,
+      'working_hours': place.formattedWorkingHoursArabic,
+      'closed_days': place.formattedClosedDaysArabic,
+    };
+  }
+}

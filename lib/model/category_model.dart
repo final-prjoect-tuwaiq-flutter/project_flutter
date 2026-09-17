@@ -3,11 +3,7 @@ class Category {
   final String name;
   final String image;
 
-  Category({
-    required this.id,
-    required this.name,
-    required this.image,
-  });
+  Category({required this.id, required this.name, required this.image});
 
   // لتحويل البيانات القادمة من Supabase (JSON) إلى كائن Category
   factory Category.fromJson(Map<String, dynamic> json) {
@@ -20,10 +16,6 @@ class Category {
 
   // لتحويل الكائن إلى JSON لإرساله إلى Supabase
   Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'name': name,
-      'image': image,
-    };
+    return {'id': id, 'name': name, 'image': image};
   }
 }
