@@ -134,44 +134,6 @@
 - مفتاح API لخدمة [Google Gemini](https://ai.google.dev/)
 - محاكي Android/iOS أو جهاز حقيقي لتشغيل التطبيق
 
----
-
-## 🚀 طريقة التثبيت والتشغيل
-
-```bash
-# 1. استنسخ المستودع
-git clone https://github.com/final-prjoect-tuwaiq-flutter/project_flutter.git
-cd project_flutter
-
-# 2. ثبّت الحزم (Dependencies)
-flutter pub get
-```
-
-### إعداد متغيرات البيئة
-
-أنشئ ملف `.env` في جذر المشروع وأضف بيانات الاتصال الخاصة بك:
-
-```env
-SUPABASE_URL=your_supabase_project_url
-SUPABASE_ANON_KEY=your_supabase_anon_key
-GEMINI_API_KEY=your_gemini_api_key
-```
-
-> ⚠️ لا تشارك هذه المفاتيح في أي مستودع عام — تأكد من إضافة `.env` إلى ملف `.gitignore`.
-
-### إعداد قاعدة البيانات
-
-1. أنشئ مشروعًا جديدًا في Supabase.
-2. طبّق ملفات الهجرة الموجودة في `supabase/migrations` على قاعدة بياناتك (عبر Supabase CLI أو لوحة التحكم مباشرة).
-3. فعّل خدمة Authentication من لوحة تحكم Supabase.
-
-### تشغيل التطبيق
-
-```bash
-flutter run
-```
-
----
 
 ## 📱 جولة داخل التطبيق
 
@@ -210,11 +172,8 @@ project_flutter/
 
 ---
 
-## 👥 الفريق
-
-مشروع تخرج ضمن معسكر **تطوير تطبيقات فلاتر — بوتكامب طويق**.
-
-<!-- أضف أسماء وروابط أعضاء الفريق هنا -->
+## 👥 الفريق المعزب 
+صنع بحب بواسطة  : فيصل الورثان , مصطفى الاشرف 
 
 ---
 
