@@ -3,10 +3,20 @@ import 'package:flutter/material.dart';
 /// نوع الشراكة الذي يطلبه صاحب الحساب.
 enum PartnerRole {
   /// يقيم فعاليات وأنشطة (مهرجانات، ورش، حفلات...).
-  organizer('organizer', 'منظّم فعاليات', 'أقيم فعاليات وأنشطة وأرغب بنشرها في الدليل.', Icons.celebration_rounded),
+  organizer(
+    'organizer',
+    'منظّم فعاليات',
+    'أقيم فعاليات وأنشطة وأرغب بنشرها في الدليل.',
+    Icons.celebration_rounded,
+  ),
 
   /// يملك أو يدير منشأة ثابتة (مقهى، متحف، منتزه...).
-  venueOwner('venue_owner', 'مالك منشأة', 'أملك أو أدير مكاناً ثابتاً وأرغب بإضافته وتحديث بياناته.', Icons.storefront_rounded);
+  venueOwner(
+    'venue_owner',
+    'مالك منشأة',
+    'أملك أو أدير مكاناً ثابتاً وأرغب بإضافته وتحديث بياناته.',
+    Icons.storefront_rounded,
+  );
 
   const PartnerRole(this.code, this.label, this.description, this.icon);
 
@@ -81,9 +91,11 @@ class PartnerAccount {
     return PartnerAccount(
       id: json['id'].toString(),
       userId: json['user_id'].toString(),
-      role: PartnerRole.fromCode(json['partner_type'] as String?) ??
+      role:
+          PartnerRole.fromCode(json['partner_type'] as String?) ??
           PartnerRole.venueOwner,
-      status: PartnerStatus.fromCode(json['status'] as String?) ??
+      status:
+          PartnerStatus.fromCode(json['status'] as String?) ??
           PartnerStatus.pending,
       displayName: (json['display_name'] as String?) ?? '',
       contactPhone: json['contact_phone'] as String?,

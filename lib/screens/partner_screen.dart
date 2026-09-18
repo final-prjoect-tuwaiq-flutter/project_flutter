@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:project_flutter/model/partner_account.dart';
-import 'package:project_flutter/screens/add_place_screen.dart';
+import 'package:project_flutter/screens/home_shell.dart';
 import 'package:project_flutter/screens/login_page.dart';
 import 'package:project_flutter/service/partner_controller.dart';
 import 'package:project_flutter/theme/theme.dart';
@@ -80,7 +80,9 @@ class _PartnerScreenState extends State<PartnerScreen> {
       if (!mounted) return;
       setState(() => _isEditing = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم إرسال طلبك، سنراجعه ونوافيك بالنتيجة')),
+        const SnackBar(
+          content: Text('تم إرسال طلبك، سنراجعه ونوافيك بالنتيجة'),
+        ),
       );
     } catch (error) {
       if (!mounted) return;
@@ -128,7 +130,8 @@ class _PartnerScreenState extends State<PartnerScreen> {
               AppPageHeader(
                 title: 'حساب شريك',
                 icon: Icons.handshake_rounded,
-                subtitle: 'انضم كمنظّم فعاليات أو مالك منشأة وأضف أماكنك بنفسك.',
+                subtitle:
+                    'انضم كمنظّم فعاليات أو مالك منشأة وأضف أماكنك بنفسك.',
                 showBack: true,
                 trailing: account == null
                     ? null
@@ -343,7 +346,8 @@ class _PartnerScreenState extends State<PartnerScreen> {
               const SizedBox(height: 16),
               Text(
                 switch (account.status) {
-                  PartnerStatus.approved => 'حسابك معتمد كـ${account.role.label}',
+                  PartnerStatus.approved =>
+                    'حسابك معتمد كـ${account.role.label}',
                   PartnerStatus.pending => 'طلبك قيد المراجعة',
                   PartnerStatus.rejected => 'لم يتم اعتماد الطلب',
                 },
@@ -353,8 +357,7 @@ class _PartnerScreenState extends State<PartnerScreen> {
               const SizedBox(height: 8),
               Text(
                 switch (account.status) {
-                  PartnerStatus.approved =>
-                    'يمكنك الآن إضافة أماكنك ونشرها في الدليل مباشرة بدون انتظار المراجعة.',
+                  PartnerStatus.approved => 'يمكنك الآن إضافة أماكنك ونشرها في الدليل مباشرة بدون انتظار المراجعة.',
                   PartnerStatus.pending =>
                     'سنتواصل معك على ${account.contactPhone ?? 'رقمك المسجّل'} فور انتهاء المراجعة.',
                   PartnerStatus.rejected =>
@@ -414,10 +417,13 @@ class _PartnerScreenState extends State<PartnerScreen> {
           AppGradientButton(
             label: 'أضف مكاناً الآن',
             icon: Icons.add_location_alt_rounded,
-            onPressed: () => Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (_) => const AddPlaceScreen()),
-            ),
+            // الإضافة تبويب في الشِّل لا صفحة مستقلة: نُفرغ ما فوق الشِّل
+            // ثم ننتقل للتبويب، فيبقى شريط التنقل ظاهراً وحالة بقية
+            // التبويبات محفوظة.
+            onPressed: () {
+              HomeShellController.instance.goToTab(1);
+              Navigator.popUntil(context, (route) => route.isFirst);
+            },
           )
         else if (account.isRejected)
           AppGradientButton(
@@ -504,8 +510,16 @@ class _PartnerBenefits extends StatelessWidget {
   Widget build(BuildContext context) {
     const benefits = [
       (Icons.bolt_rounded, 'نشر مباشر', 'أضف أماكنك دون انتظار المراجعة'),
-      (Icons.edit_location_alt_rounded, 'تحديث فوري', 'عدّل الأوقات والأسعار وقتما تشاء'),
-      (Icons.verified_rounded, 'شارة موثّقة', 'يظهر حسابك كشريك معتمد في المعزب'),
+      (
+        Icons.edit_location_alt_rounded,
+        'تحديث فوري',
+        'عدّل الأوقات والأسعار وقتما تشاء',
+      ),
+      (
+        Icons.verified_rounded,
+        'شارة موثّقة',
+        'يظهر حسابك كشريك معتمد في المعزب',
+      ),
     ];
     final colors = appColors(context);
 

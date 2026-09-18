@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:project_flutter/screens/categories_screen.dart';
+import 'package:project_flutter/screens/home_shell.dart';
 import 'package:project_flutter/service/supabase_data.dart';
 import 'package:project_flutter/widgets/app_ui.dart';
 import 'package:project_flutter/widgets/auth_layout.dart';
@@ -235,7 +235,7 @@ class _LoginPageState extends State<LoginPage> {
                         } else {
                           navigator.pushReplacement(
                             MaterialPageRoute(
-                              builder: (_) => const CategoriesScreen(),
+                              builder: (_) => const HomeShell(),
                             ),
                           );
                         }

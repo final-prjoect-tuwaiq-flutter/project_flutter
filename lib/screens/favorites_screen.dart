@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:project_flutter/model/event.dart';
-import 'package:project_flutter/screens/categories_screen.dart';
-import 'package:project_flutter/screens/account.dart';
-import 'package:project_flutter/screens/add_place_screen.dart';
+import 'package:project_flutter/screens/categories_screen.dart' show EventCard;
 import 'package:project_flutter/service/favorites_controller.dart';
 import 'package:project_flutter/widgets/app_ui.dart';
 import 'package:project_flutter/widgets/chat_fab_button.dart';
@@ -17,7 +15,6 @@ class FavoritesScreen extends StatefulWidget {
 }
 
 class _FavoritesScreenState extends State<FavoritesScreen> {
-  int _currentIndex = 2;
   late Future<List<Event>> _favoritesFuture;
   List<Event>? _events;
 
@@ -49,51 +46,26 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
   }
 
   Future<void> _removeFavorite(Event event) async {
-    final previousEvents = _events;
-    setState(() {
-      _events = (_events ?? []).where((e) => e.id != event.id).toList();
-    });
+    final messenger = ScaffoldMessenger.of(context);
 
     try {
+      // الكنترولر يزيلها تفاؤلياً ويتراجع عند الفشل، والقائمة تُرشَّح منه،
+      // فلا حاجة لنسخة محلية ثانية كانت تتعارض معه.
       await FavoritesController.instance.remove(event.id);
     } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _events = previousEvents;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تعذر إزالة المكان من المفضلة')),
-      );
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(content: Text('تعذر إزالة المكان من المفضلة')),
+        );
       return;
     }
 
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('تمت إزالة المكان من المفضلة')),
-    );
-  }
-
-  void _handleNavigation(int index) {
-    setState(() {
-      _currentIndex = index;
-    });
-
-    if (index == 0) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const CategoriesScreen()),
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(content: Text('تمت إزالة المكان من المفضلة')),
       );
-    } else if (index == 1) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const AddPlaceScreen()),
-      );
-    } else if (index == 2) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const AccountScreen()),
-      );
-    }
   }
 
   @override
@@ -109,75 +81,80 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
           extendBody: true,
           body: Stack(
             children: [
-              FutureBuilder<List<Event>>(
-                future: _favoritesFuture,
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const _FavoritesLayout(
-                      count: null,
-                      child: SizedBox(height: 520, child: AppListSkeleton()),
-                    );
-                  }
+              ListenableBuilder(
+                listenable: FavoritesController.instance,
+                builder: (context, _) => FutureBuilder<List<Event>>(
+                  future: _favoritesFuture,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const _FavoritesLayout(
+                        count: null,
+                        child: SizedBox(height: 520, child: AppListSkeleton()),
+                      );
+                    }
 
-                  if (snapshot.hasError) {
-                    return _FavoritesLayout(
-                      count: null,
-                      child: AppStatePanel(
-                        icon: Icons.cloud_off_rounded,
-                        title: 'تعذر تحميل المفضلة',
-                        subtitle: snapshot.error.toString(),
-                        actionLabel: 'إعادة المحاولة',
-                        actionIcon: Icons.refresh_rounded,
-                        onAction: _refreshFavorites,
-                      ),
-                    );
-                  }
-
-                  _events ??= snapshot.data ?? [];
-                  final events = _events!;
-                  if (events.isEmpty) {
-                    return const _FavoritesLayout(
-                      count: 0,
-                      child: AppStatePanel(
-                        icon: Icons.favorite_border_rounded,
-                        title: 'لا توجد عناصر في المفضلة بعد',
-                        subtitle: 'اضغط على القلب في صفحة أي مكان لحفظه هنا والرجوع إليه لاحقاً.',
-                      ),
-                    );
-                  }
-
-                  return RefreshIndicator(
-                    color: colors.accentColor,
-                    onRefresh: _refreshFavorites,
-                    child: CustomScrollView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      slivers: [
-                        SliverToBoxAdapter(
-                          child: _FavoritesHeader(count: events.length),
+                    if (snapshot.hasError) {
+                      return _FavoritesLayout(
+                        count: null,
+                        child: AppStatePanel(
+                          icon: Icons.cloud_off_rounded,
+                          title: 'تعذر تحميل المفضلة',
+                          subtitle: snapshot.error.toString(),
+                          actionLabel: 'إعادة المحاولة',
+                          actionIcon: Icons.refresh_rounded,
+                          onAction: _refreshFavorites,
                         ),
-                        const SliverToBoxAdapter(child: SizedBox(height: 10)),
-                        SliverList.builder(
-                          itemCount: events.length,
-                          itemBuilder: (context, index) => EventCard(
-                            key: ValueKey(events[index].id),
-                            event: events[index],
-                            showPrice: false,
-                            onRemoveFavorite: () =>
-                                _removeFavorite(events[index]),
+                      );
+                    }
+
+                    _events ??= snapshot.data ?? [];
+                    // ترشيح بحالة الكنترولر: إزالة مكان من صفحة تفاصيله كانت
+                    // تترك بطاقته معروضة هنا حتى إعادة التحميل.
+                    final events = _events!
+                        .where(
+                          (e) => FavoritesController.instance.isFavorite(e.id),
+                        )
+                        .toList();
+                    if (events.isEmpty) {
+                      return const _FavoritesLayout(
+                        count: 0,
+                        child: AppStatePanel(
+                          icon: Icons.favorite_border_rounded,
+                          title: 'لا توجد عناصر في المفضلة بعد',
+                          subtitle: 'اضغط على القلب في صفحة أي مكان لحفظه هنا والرجوع إليه لاحقاً.',
+                        ),
+                      );
+                    }
+
+                    return RefreshIndicator(
+                      color: colors.accentColor,
+                      onRefresh: _refreshFavorites,
+                      child: CustomScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        slivers: [
+                          SliverToBoxAdapter(
+                            child: _FavoritesHeader(count: events.length),
                           ),
-                        ),
-                        const SliverToBoxAdapter(child: SizedBox(height: 140)),
-                      ],
-                    ),
-                  );
-                },
+                          const SliverToBoxAdapter(child: SizedBox(height: 10)),
+                          SliverList.builder(
+                            itemCount: events.length,
+                            itemBuilder: (context, index) => EventCard(
+                              key: ValueKey(events[index].id),
+                              event: events[index],
+                              showPrice: false,
+                              onRemoveFavorite: () =>
+                                  _removeFavorite(events[index]),
+                            ),
+                          ),
+                          const SliverToBoxAdapter(child: SizedBox(height: 40)),
+                        ],
+                      ),
+                    );
+                  },
+                ),
               ),
-              const ChatFabButton(),
+              const ChatFabButton(bottomOffset: 26),
             ],
-          ),
-          bottomNavigationBar: FloatingBottomNavBar(
-            currentIndex: _currentIndex,
-            onTap: _handleNavigation,
           ),
         ),
       ),
@@ -194,7 +171,7 @@ class _FavoritesLayout extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.only(bottom: 140),
+      padding: const EdgeInsets.only(bottom: 40),
       physics: const AlwaysScrollableScrollPhysics(),
       children: [
         _FavoritesHeader(count: count),

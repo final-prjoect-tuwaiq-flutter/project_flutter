@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:flutter/services.dart';
 import 'package:project_flutter/screens/event_details.dart';
 import 'package:project_flutter/theme/theme.dart';
 import 'package:project_flutter/widgets/app_bottom_nav_bar.dart';
@@ -15,19 +14,19 @@ import 'package:project_flutter/screens/login_page.dart';
 import 'package:project_flutter/service/favorites_controller.dart';
 import 'package:project_flutter/service/location.dart'; // استيراد ملف الموقع
 import 'package:project_flutter/service/metro_controller.dart';
-import 'package:project_flutter/screens/account.dart';
-import 'package:project_flutter/screens/add_place_screen.dart';
 import 'package:project_flutter/widgets/chat_fab_button.dart';
 
 class CategoriesScreen extends StatefulWidget {
-  const CategoriesScreen({super.key});
+  /// يُبلّغ الشِّل بفتح تصنيف أو إغلاقه، ليقرّر وجهة زر رجوع الجهاز.
+  final ValueChanged<bool>? onCategoryOpenChanged;
+
+  const CategoriesScreen({super.key, this.onCategoryOpenChanged});
 
   @override
-  State<CategoriesScreen> createState() => _CategoriesScreenState();
+  State<CategoriesScreen> createState() => CategoriesScreenState();
 }
 
-class _CategoriesScreenState extends State<CategoriesScreen> {
-  int _currentIndex = 0;
+class CategoriesScreenState extends State<CategoriesScreen> {
   int? _selectedCategoryId;
   String? _selectedCategoryName;
 
@@ -319,6 +318,8 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
       _resetSortState();
     });
 
+    widget.onCategoryOpenChanged?.call(category != null);
+
     if (shouldResort) _sortByNearest(reuseLastPosition: true);
   }
 
@@ -326,72 +327,41 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppCustomColors>()!;
 
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light,
-      child: Directionality(
-        textDirection: TextDirection.rtl,
-        // زر الرجوع في الجهاز يُعيد المستخدم للصفحة الرئيسية بدل الخروج
-        // من التطبيق ما دام هناك تصنيف مفتوح.
-        child: PopScope(
-          canPop: _selectedCategoryId == null,
-          onPopInvokedWithResult: (didPop, _) {
-            if (!didPop && _selectedCategoryId != null) _selectCategory(null);
-          },
-          child: Scaffold(
-            backgroundColor: colors.creamBackground,
-            extendBody: true,
-            body: Stack(
-              children: [
-                // السحب للتحديث: لم تكن هناك أي طريقة لإعادة جلب الأماكن
-                // بعد فشل الشبكة سوى إغلاق التطبيق وفتحه من جديد.
-                RefreshIndicator(
-                  color: colors.accentColor,
-                  backgroundColor: colors.surfaceColor,
-                  onRefresh: _refreshEvents,
-                  child: CustomScrollView(
-                    physics: const BouncingScrollPhysics(
-                      parent: AlwaysScrollableScrollPhysics(),
-                    ),
-                    slivers: [
-                      // 1. الواجهة الليلية العلوية (الهوية + التصنيفات)
-                      SliverToBoxAdapter(child: _buildHero(colors)),
-
-                      // 2. عنوان القسم + زر الترتيب حسب الأقرب
-                      SliverToBoxAdapter(child: _buildSectionHeader(colors)),
-
-                      // 3. قسم الأماكن
-                      _buildEventsSliver(colors),
-                    ],
-                  ),
-                ),
-                const ChatFabButton(bottomOffset: 118),
-              ],
+    // الشاشة تعيش داخل [HomeShell]: الشِّل يملك الـ Scaffold وشريط التنقل
+    // ومعالجة زر الرجوع، وهذه تُعيد محتواها فقط.
+    return Stack(
+      children: [
+        // السحب للتحديث: لم تكن هناك أي طريقة لإعادة جلب الأماكن
+        // بعد فشل الشبكة سوى إغلاق التطبيق وفتحه من جديد.
+        RefreshIndicator(
+          color: colors.accentColor,
+          backgroundColor: colors.surfaceColor,
+          onRefresh: _refreshEvents,
+          child: CustomScrollView(
+            physics: const BouncingScrollPhysics(
+              parent: AlwaysScrollableScrollPhysics(),
             ),
+            slivers: [
+              // 1. الواجهة الليلية العلوية (الهوية + التصنيفات)
+              SliverToBoxAdapter(child: _buildHero(colors)),
 
-            // 4. البوتوم ناف بار العائم
-            bottomNavigationBar: FloatingBottomNavBar(
-              currentIndex: _currentIndex,
-              onTap: (index) {
-                if (index == 0) {
-                  setState(() => _currentIndex = 0);
-                  _selectCategory(null);
-                } else if (index == 1) {
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(builder: (_) => const AddPlaceScreen()),
-                  );
-                } else if (index == 2) {
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(builder: (_) => const AccountScreen()),
-                  );
-                }
-              },
-            ),
+              // 2. عنوان القسم + زر الترتيب حسب الأقرب
+              SliverToBoxAdapter(child: _buildSectionHeader(colors)),
+
+              // 3. قسم الأماكن
+              _buildEventsSliver(colors),
+            ],
           ),
         ),
-      ),
+        const ChatFabButton(),
+      ],
     );
+  }
+
+  /// يعيد الصفحة إلى "الكل". يستدعيها الشِّل من زر الرجوع ومن النقر على
+  /// تبويب الرئيسية وهو مفتوح.
+  void resetToAll() {
+    if (_selectedCategoryId != null) _selectCategory(null);
   }
 
   // ==========================================
@@ -725,7 +695,9 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
         // قائمة كسولة: لا يُبنى إلا ما يظهر على الشاشة، والمفاتيح تحافظ على
         // حالة الكروت عند إعادة الترتيب.
         return SliverPadding(
-          padding: const EdgeInsets.only(bottom: 140),
+          padding: EdgeInsets.only(
+            bottom: AppBottomNavBar.contentBottomPadding(context),
+          ),
           sliver: SliverList(
             delegate: SliverChildBuilderDelegate(
               (context, index) {
@@ -1464,15 +1436,4 @@ class _MessagePanel extends StatelessWidget {
       ),
     );
   }
-}
-
-// ==========================================
-// البوتوم ناف بار العائم (نفس الشريط الموحّد للتطبيق)
-// ==========================================
-class FloatingBottomNavBar extends AppBottomNavBar {
-  const FloatingBottomNavBar({
-    super.key,
-    required super.currentIndex,
-    required super.onTap,
-  });
 }

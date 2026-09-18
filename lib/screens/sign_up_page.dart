@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:project_flutter/screens/categories_screen.dart';
+import 'package:project_flutter/screens/home_shell.dart';
 import 'package:project_flutter/screens/login_page.dart';
 import 'package:project_flutter/service/supabase_data.dart';
 import 'package:project_flutter/widgets/app_ui.dart';
@@ -257,9 +257,7 @@ class _SignUpPageState extends State<SignUpPage> {
                         navigator.pop(true);
                       } else {
                         navigator.pushReplacement(
-                          MaterialPageRoute(
-                            builder: (_) => const CategoriesScreen(),
-                          ),
+                          MaterialPageRoute(builder: (_) => const HomeShell()),
                         );
                       }
                     },

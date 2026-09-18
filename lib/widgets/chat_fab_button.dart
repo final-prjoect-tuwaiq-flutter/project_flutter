@@ -1,20 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:project_flutter/screens/chat_screen.dart';
 import 'package:project_flutter/theme/theme.dart';
+import 'package:project_flutter/widgets/app_bottom_nav_bar.dart';
 
 /// زر دائري عائم في الزاوية اليمنى السفلى يفتح شاشة المساعد الذكي.
 /// يوضع داخل [Stack] فوق محتوى الشاشة (وفوق شريط التنقل السفلي عند الحاجة).
 class ChatFabButton extends StatelessWidget {
-  final double bottomOffset;
+  /// ارتفاع مخصّص فوق الحافة. يُترك فارغاً في الشاشات التي تحمل شريط تنقل
+  /// فيُحسب من ارتفاع الشريط وحشوة النظام بدل رقم ثابت كان يزيح الزر فوق
+  /// الشريط على أجهزة الإيماءات.
+  final double? bottomOffset;
 
-  const ChatFabButton({super.key, this.bottomOffset = 118});
+  const ChatFabButton({super.key, this.bottomOffset});
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppCustomColors>()!;
+    final bottom =
+        bottomOffset ?? AppBottomNavBar.heightWithInsets(context) + 20;
 
     return Positioned(
-      bottom: bottomOffset,
+      bottom: bottom,
       right: 18,
       child: Tooltip(
         message: 'مرشد المعزب',

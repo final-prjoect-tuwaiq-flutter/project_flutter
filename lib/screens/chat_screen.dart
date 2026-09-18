@@ -71,6 +71,38 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  /// يمسح المحادثة ويبدأ جلسة جديدة (ويُحدِّث قائمة الأماكن في تعليمات النظام).
+  Future<void> _resetConversation() async {
+    setState(() {
+      _history.clear();
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      await _chatService.startNewSession();
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _history.add(
+          ChatMessage(
+            user: _bot,
+            createdAt: DateTime.now(),
+            text: 'بدأنا محادثة جديدة. بمَ أساعدك؟',
+          ),
+        );
+      });
+    } catch (error) {
+      debugPrint('Gemini reset error: $error');
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage =
+            'تعذّر تجهيز المرشد الآن. تأكد من اتصالك بالإنترنت وحاول مرة أخرى.';
+      });
+    }
+  }
+
   Future<void> _onSend(ChatMessage message) async {
     setState(() {
       _messages.insert(0, message);
@@ -118,7 +150,12 @@ class _ChatScreenState extends State<ChatScreen> {
           backgroundColor: colors.creamBackground,
           body: Column(
             children: [
-              _ChatHeader(isTyping: _isBotTyping),
+              _ChatHeader(
+                isTyping: _isBotTyping,
+                onReset: (_isLoading || _isBotTyping || _history.length <= 1)
+                    ? null
+                    : _resetConversation,
+              ),
               Expanded(child: _buildBody(colors)),
             ],
           ),
@@ -345,7 +382,10 @@ class _TypingBubble extends StatelessWidget {
 class _ChatHeader extends StatelessWidget {
   final bool isTyping;
 
-  const _ChatHeader({required this.isTyping});
+  /// يُعطَّل أثناء التجهيز أو حين تكون المحادثة فارغة أصلاً.
+  final VoidCallback? onReset;
+
+  const _ChatHeader({required this.isTyping, this.onReset});
 
   @override
   Widget build(BuildContext context) {
@@ -435,6 +475,14 @@ class _ChatHeader extends StatelessWidget {
                           ),
                         ],
                       ),
+                    ),
+                    // المحادثة تبقى محفوظة بين الفتحات، فلا بد من مخرج
+                    // لبدئها من جديد بدل أن تكبر بلا نهاية.
+                    AppCircleButton(
+                      icon: Icons.refresh_rounded,
+                      tooltip: 'محادثة جديدة',
+                      onPressed: onReset,
+                      size: 38,
                     ),
                   ],
                 ),

@@ -119,10 +119,14 @@ class _ImageGallerySectionState extends State<_ImageGallerySection> {
   void initState() {
     super.initState();
     // تجميع الصور المتاحة (الغلاف والمصغرة)
-    _images = [
-      if (widget.event.coverImageUrl != null) widget.event.coverImageUrl!,
-      if (widget.event.thumbnailUrl != null) widget.event.thumbnailUrl!,
-    ];
+    // الغلاف والمصغّرة قد يحملان الرابط نفسه، فينتج صفحتان متطابقتان
+    // ومؤشّر صور لا معنى له.
+    _images = <String>{
+      if (widget.event.coverImageUrl?.trim().isNotEmpty ?? false)
+        widget.event.coverImageUrl!.trim(),
+      if (widget.event.thumbnailUrl?.trim().isNotEmpty ?? false)
+        widget.event.thumbnailUrl!.trim(),
+    }.toList();
     // بلا صور نترك القائمة بعنصر فارغ واحد، فيرسم AppPlaceImage البديل
     // محلياً بدل الاعتماد على خدمة صور خارجية.
     if (_images.isEmpty) _images.add('');
@@ -301,7 +305,9 @@ class _HeaderInfoSection extends StatelessWidget {
     if (min != null && max != null && max > min) {
       return '${min.toStringAsFixed(0)} – ${max.toStringAsFixed(0)} ر.س';
     }
-    return 'من ${min?.toStringAsFixed(0) ?? 0} ر.س';
+    // مكان مدفوع بلا سعر مسجّل: عرض «من 0 ر.س» كان يُفهم على أنه مجاني.
+    if (min == null) return 'غير محدد';
+    return 'من ${min.toStringAsFixed(0)} ر.س';
   }
 
   @override
@@ -1248,6 +1254,8 @@ class _BookNowButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = appColors(context);
     final isFree = event.isFree ?? false;
+    final hasPrice = event.priceMin != null;
+    final hasAction = _getActionUri() != null;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
@@ -1271,7 +1279,7 @@ class _BookNowButton extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  isFree ? 'الدخول' : 'يبدأ من',
+                  isFree ? 'الدخول' : (hasPrice ? 'يبدأ من' : 'السعر'),
                   style: TextStyle(
                     color: colors.textMuted,
                     fontSize: 11.5,
@@ -1279,9 +1287,12 @@ class _BookNowButton extends StatelessWidget {
                   ),
                 ),
                 Text(
+                  // بلا سعر مسجّل كان يظهر «0 ر.س» فيبدو المكان مجانياً.
                   isFree
                       ? 'مجاني'
-                      : '${event.priceMin?.toStringAsFixed(0) ?? 0} ر.س',
+                      : (hasPrice
+                            ? '${event.priceMin!.toStringAsFixed(0)} ر.س'
+                            : 'غير محدد'),
                   style: AppTheme.display(
                     20,
                     color: colors.textPrimary,
@@ -1293,11 +1304,17 @@ class _BookNowButton extends StatelessWidget {
             const SizedBox(width: 18),
             Expanded(
               child: AppGradientButton(
-                label: _hasTicketUrl ? 'احجز الآن' : 'افتح الموقع',
+                // زر يفتح حواراً بالخطأ في كل مرة ليس زراً؛ يُعطَّل بعنوان
+                // صريح حين لا يوجد رابط حجز ولا إحداثيات للمكان.
+                label: _hasTicketUrl
+                    ? 'احجز الآن'
+                    : (hasAction ? 'افتح الموقع' : 'لا يوجد رابط'),
                 icon: _hasTicketUrl
                     ? Icons.arrow_forward_rounded
-                    : Icons.location_on_rounded,
-                onPressed: () => _launchAction(context),
+                    : (hasAction
+                          ? Icons.location_on_rounded
+                          : Icons.link_off_rounded),
+                onPressed: hasAction ? () => _launchAction(context) : null,
               ),
             ),
           ],

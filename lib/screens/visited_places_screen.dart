@@ -1,26 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:project_flutter/model/event.dart';
+import 'package:project_flutter/model/visited_place.dart';
 import 'package:project_flutter/screens/event_details.dart';
 import 'package:project_flutter/screens/login_page.dart';
 import 'package:project_flutter/service/supabase_data.dart';
 import 'package:project_flutter/theme/theme.dart';
 import 'package:project_flutter/widgets/app_ui.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-
-class _VisitedItem {
-  final dynamic id;
-  final Event event;
-  final String? notes;
-  final DateTime? visitedAt;
-
-  const _VisitedItem({
-    required this.id,
-    required this.event,
-    this.notes,
-    this.visitedAt,
-  });
-}
 
 class VisitedPlacesScreen extends StatefulWidget {
   const VisitedPlacesScreen({super.key});
@@ -30,7 +17,7 @@ class VisitedPlacesScreen extends StatefulWidget {
 }
 
 class _VisitedPlacesScreenState extends State<VisitedPlacesScreen> {
-  late Future<List<_VisitedItem>> _visitedFuture;
+  late Future<List<VisitedPlace>> _visitedFuture;
 
   @override
   void initState() {
@@ -38,7 +25,7 @@ class _VisitedPlacesScreenState extends State<VisitedPlacesScreen> {
     _visitedFuture = _loadVisited();
   }
 
-  Future<List<_VisitedItem>> _loadVisited() async {
+  Future<List<VisitedPlace>> _loadVisited() async {
     final rows = await SupabaseData().pullForCurrentUser();
     if (rows.isEmpty) return [];
 
@@ -53,12 +40,12 @@ class _VisitedPlacesScreenState extends State<VisitedPlacesScreen> {
       for (final json in response) (json['id'] as int): Event.fromJson(json),
     };
 
-    final items = <_VisitedItem>[];
+    final items = <VisitedVisit>[];
     for (final row in rows) {
       final event = eventsById[row['place_id'] as int];
       if (event == null) continue;
       items.add(
-        _VisitedItem(
+        VisitedVisit(
           id: row['id'],
           event: event,
           notes: row['notes'] as String?,
@@ -69,13 +56,7 @@ class _VisitedPlacesScreenState extends State<VisitedPlacesScreen> {
       );
     }
 
-    items.sort((a, b) {
-      final dateA = a.visitedAt ?? DateTime(0);
-      final dateB = b.visitedAt ?? DateTime(0);
-      return dateB.compareTo(dateA);
-    });
-
-    return items;
+    return VisitedPlace.group(items);
   }
 
   Future<void> _refresh() async {
@@ -85,7 +66,7 @@ class _VisitedPlacesScreenState extends State<VisitedPlacesScreen> {
     await _visitedFuture;
   }
 
-  Future<void> _deleteVisit(_VisitedItem item) async {
+  Future<void> _deleteVisit(VisitedVisit item) async {
     // الحذف نهائي ولا يمكن التراجع عنه، وكان يقع بضغطة واحدة بلا تأكيد.
     final confirmed = await showDialog<bool>(
       context: context,
@@ -99,8 +80,12 @@ class _VisitedPlacesScreenState extends State<VisitedPlacesScreen> {
           ),
           title: const Text('حذف الزيارة'),
           content: Text(
-            'سيُحذف سجل زيارتك لـ"${item.event.title ?? 'هذا المكان'}" '
-            'وملاحظاتك عنها نهائياً.',
+            item.visitedAt == null
+                ? 'سيُحذف سجل زيارتك لـ"${item.event.title ?? 'هذا المكان'}" '
+                      'وملاحظاتك عنها نهائياً.'
+                : 'سيُحذف سجل زيارتك لـ"${item.event.title ?? 'هذا المكان'}" '
+                      'بتاريخ ${formatArabicDate(item.visitedAt!)} '
+                      'وملاحظاتك عنها نهائياً.',
             textAlign: TextAlign.center,
           ),
           actionsAlignment: MainAxisAlignment.center,
@@ -127,8 +112,9 @@ class _VisitedPlacesScreenState extends State<VisitedPlacesScreen> {
       await SupabaseData().delete(id: item.id);
       if (!mounted) return;
       setState(() {
+        // تُحذف الزيارة وحدها، ويختفي المكان فقط إذا كانت آخر زياراته.
         _visitedFuture = _visitedFuture.then(
-          (items) => items.where((it) => it.id != item.id).toList(),
+          (places) => VisitedPlace.removeVisit(places, item.id),
         );
       });
     } catch (e) {
@@ -148,7 +134,7 @@ class _VisitedPlacesScreenState extends State<VisitedPlacesScreen> {
         textDirection: TextDirection.rtl,
         child: Scaffold(
           backgroundColor: colors.creamBackground,
-          body: FutureBuilder<List<_VisitedItem>>(
+          body: FutureBuilder<List<VisitedPlace>>(
             future: _visitedFuture,
             builder: (context, snapshot) {
               // القائمة تُبنى ككشّاف (sliver) كسول: لا تُنشأ إلا الكروت الظاهرة.
@@ -193,10 +179,12 @@ class _VisitedPlacesScreenState extends State<VisitedPlacesScreen> {
                         ),
                 );
               } else {
-                final items = snapshot.data ?? [];
-                count = items.length;
-                lastVisit = items.isEmpty ? null : items.first.visitedAt;
-                bodySliver = items.isEmpty
+                final places = snapshot.data ?? [];
+                // العدّاد يحسب الزيارات لا الأماكن: زيارة المكان مرتين
+                // زيارتان وإن ظهرتا في بطاقة واحدة.
+                count = VisitedPlace.totalVisits(places);
+                lastVisit = places.isEmpty ? null : places.first.lastVisitAt;
+                bodySliver = places.isEmpty
                     ? boxed(
                         const AppStatePanel(
                           icon: Icons.explore_rounded,
@@ -207,12 +195,12 @@ class _VisitedPlacesScreenState extends State<VisitedPlacesScreen> {
                     : SliverPadding(
                         padding: const EdgeInsets.symmetric(horizontal: 20),
                         sliver: SliverList.builder(
-                          itemCount: items.length,
+                          itemCount: places.length,
                           itemBuilder: (context, index) => _VisitedCard(
-                            key: ValueKey(items[index].id),
-                            item: items[index],
-                            isLast: index == items.length - 1,
-                            onDelete: () => _deleteVisit(items[index]),
+                            key: ValueKey(places[index].event.id),
+                            place: places[index],
+                            isLast: index == places.length - 1,
+                            onDeleteVisit: _deleteVisit,
                           ),
                         ),
                       );
@@ -279,31 +267,30 @@ class _CountPill extends StatelessWidget {
   }
 }
 
-/// بطاقة زيارة على شكل خط زمني: التاريخ على الجانب والتفاصيل في البطاقة.
+/// بطاقة مكان على شكل خط زمني: آخر زيارة على الجانب، وكل الزيارات بالداخل.
 class _VisitedCard extends StatelessWidget {
-  final _VisitedItem item;
+  final VisitedPlace place;
   final bool isLast;
-  final VoidCallback onDelete;
+  final ValueChanged<VisitedVisit> onDeleteVisit;
 
   const _VisitedCard({
     super.key,
-    required this.item,
+    required this.place,
     required this.isLast,
-    required this.onDelete,
+    required this.onDeleteVisit,
   });
 
   @override
   Widget build(BuildContext context) {
-    final event = item.event;
+    final event = place.event;
     final colors = appColors(context);
-    final date = item.visitedAt;
-    final hasNotes = item.notes != null && item.notes!.trim().isNotEmpty;
+    final date = place.lastVisitAt;
 
     return IntrinsicHeight(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // عمود الخط الزمني
+          // عمود الخط الزمني: تاريخ آخر زيارة للمكان
           SizedBox(
             width: 54,
             child: Column(
@@ -395,8 +382,6 @@ class _VisitedCard extends StatelessWidget {
                                   height: 64,
                                   child: AppPlaceImage(
                                     url: event.coverImageUrl,
-                                    // مصغّرة 64px: فك ترميز الصورة كاملة هنا
-                                    // كان يهدر ذاكرة الصور بلا فائدة.
                                     decodeWidth: 64,
                                     fallbackIconSize: 22,
                                   ),
@@ -417,72 +402,38 @@ class _VisitedCard extends StatelessWidget {
                                         height: 1.35,
                                       ),
                                     ),
-                                    if (date != null) ...[
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        'زرته في ${formatArabicDate(date)}',
-                                        style: TextStyle(
-                                          color: colors.textMuted,
-                                          fontSize: 11.5,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ],
+                                    const SizedBox(height: 3),
+                                    _VisitSummary(place: place),
                                   ],
                                 ),
                               ),
-                              IconButton(
-                                tooltip: 'حذف الزيارة',
-                                onPressed: onDelete,
-                                icon: Icon(
-                                  Icons.delete_outline_rounded,
-                                  color: colors.textMuted,
-                                  size: 21,
+                              // المكان بزيارة واحدة: زر حذف واحد في الترويسة.
+                              // وإلا فلكل زيارة زرّها في سطرها بالأسفل.
+                              if (!place.isRepeated)
+                                IconButton(
+                                  tooltip: 'حذف الزيارة',
+                                  onPressed: () =>
+                                      onDeleteVisit(place.visits.first),
+                                  icon: Icon(
+                                    Icons.delete_outline_rounded,
+                                    color: colors.textMuted,
+                                    size: 21,
+                                  ),
                                 ),
-                              ),
                             ],
                           ),
-                          if (hasNotes) ...[
-                            const SizedBox(height: 10),
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.fromLTRB(
-                                12,
-                                10,
-                                12,
-                                10,
+
+                          if (!place.isRepeated)
+                            _VisitNote(notes: place.visits.first.notes)
+                          else ...[
+                            const SizedBox(height: 12),
+                            Divider(height: 1, color: colors.borderSoft),
+                            const SizedBox(height: 4),
+                            for (final visit in place.visits)
+                              _VisitRow(
+                                visit: visit,
+                                onDelete: () => onDeleteVisit(visit),
                               ),
-                              decoration: BoxDecoration(
-                                color: colors.accentColorDeep.withValues(
-                                  alpha: 0.08,
-                                ),
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Icon(
-                                    Icons.format_quote_rounded,
-                                    size: 16,
-                                    color: colors.accentColorDeep,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Expanded(
-                                    child: Text(
-                                      item.notes!,
-                                      style: TextStyle(
-                                        color: colors.textPrimary.withValues(
-                                          alpha: 0.85,
-                                        ),
-                                        fontSize: 13,
-                                        height: 1.7,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
                           ],
                         ],
                       ),
@@ -493,6 +444,171 @@ class _VisitedCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// سطر تحت اسم المكان: عدد الزيارات وتاريخ آخرها.
+class _VisitSummary extends StatelessWidget {
+  final VisitedPlace place;
+
+  const _VisitSummary({required this.place});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = appColors(context);
+    final date = place.lastVisitAt;
+
+    if (!place.isRepeated) {
+      if (date == null) return const SizedBox.shrink();
+      return Text(
+        'زرته في ${formatArabicDate(date)}',
+        style: TextStyle(
+          color: colors.textMuted,
+          fontSize: 11.5,
+          fontWeight: FontWeight.w600,
+        ),
+      );
+    }
+
+    return Wrap(
+      spacing: 6,
+      runSpacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            gradient: colors.accentGradient,
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: Text(
+            arabicVisitsCount(place.visitCount),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 10.5,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        if (date != null)
+          Text(
+            'آخرها ${formatArabicDate(date)}',
+            style: TextStyle(
+              color: colors.textMuted,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// زيارة واحدة داخل مكان تكرّرت زيارته: تاريخها وملاحظتها وزر حذفها.
+class _VisitRow extends StatelessWidget {
+  final VisitedVisit visit;
+  final VoidCallback onDelete;
+
+  const _VisitRow({required this.visit, required this.onDelete});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = appColors(context);
+    final date = visit.visitedAt;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.event_available_rounded,
+                size: 15,
+                color: colors.accentColor,
+              ),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Text(
+                  date == null ? 'زيارة بلا تاريخ' : formatArabicDate(date),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: colors.textPrimary,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'حذف هذه الزيارة',
+                visualDensity: VisualDensity.compact,
+                constraints: const BoxConstraints(),
+                padding: const EdgeInsets.all(6),
+                onPressed: onDelete,
+                icon: Icon(
+                  Icons.delete_outline_rounded,
+                  color: colors.textMuted,
+                  size: 19,
+                ),
+              ),
+            ],
+          ),
+          _VisitNote(notes: visit.notes, compact: true),
+        ],
+      ),
+    );
+  }
+}
+
+/// ملاحظة زيارة داخل إطار مقتبس. لا تُبنى إن لم توجد ملاحظة.
+class _VisitNote extends StatelessWidget {
+  final String? notes;
+  final bool compact;
+
+  const _VisitNote({required this.notes, this.compact = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final text = notes?.trim() ?? '';
+    if (text.isEmpty) return const SizedBox.shrink();
+
+    final colors = appColors(context);
+
+    return Padding(
+      padding: EdgeInsets.only(top: compact ? 6 : 10),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        decoration: BoxDecoration(
+          color: colors.accentColorDeep.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              Icons.format_quote_rounded,
+              size: 16,
+              color: colors.accentColorDeep,
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                text,
+                style: TextStyle(
+                  color: colors.textPrimary.withValues(alpha: 0.85),
+                  fontSize: compact ? 12.5 : 13,
+                  height: 1.7,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
