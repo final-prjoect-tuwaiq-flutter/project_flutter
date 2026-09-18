@@ -5,36 +5,112 @@ AppCustomColors appColors(BuildContext context) =>
     Theme.of(context).extension<AppCustomColors>()!;
 
 // ==========================================
-// شعار التطبيق (مربع متدرّج بأيقونة الفعاليات)
+// ملفات الأصول الثابتة
+// ==========================================
+class AppAssets {
+  const AppAssets._();
+
+  /// شعار "المعزب" الرسمي.
+  static const String logo = 'assets/images/app_logo.png';
+}
+
+// ==========================================
+// شعار التطبيق (الشعار الرسمي داخل مربّع بزوايا دائرية)
 // ==========================================
 class AppBrandMark extends StatelessWidget {
   final double size;
 
-  const AppBrandMark({super.key, this.size = 46});
+  /// يُطفأ الظل الذهبي عندما يوضع الشعار فوق سطح فاتح.
+  final bool withGlow;
+
+  const AppBrandMark({super.key, this.size = 46, this.withGlow = true});
 
   @override
   Widget build(BuildContext context) {
     final colors = appColors(context);
+    final radius = BorderRadius.circular(size * 0.22);
 
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        gradient: colors.accentGradient,
-        borderRadius: BorderRadius.circular(size * 0.34),
-        boxShadow: [
-          BoxShadow(
-            color: colors.accentColor.withValues(alpha: 0.45),
-            blurRadius: size * 0.4,
-            offset: Offset(0, size * 0.17),
-          ),
-        ],
+        borderRadius: radius,
+        boxShadow: withGlow
+            ? [
+                BoxShadow(
+                  color: colors.accentColorDeep.withValues(alpha: 0.35),
+                  blurRadius: size * 0.38,
+                  offset: Offset(0, size * 0.15),
+                ),
+              ]
+            : null,
       ),
-      child: Icon(
-        Icons.festival_rounded,
-        color: Colors.white,
-        size: size * 0.52,
+      child: ClipRRect(
+        borderRadius: radius,
+        child: Image.asset(
+          AppAssets.logo,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          filterQuality: FilterQuality.medium,
+        ),
       ),
+    );
+  }
+}
+
+// ==========================================
+// انتقال مشترك لصورة المكان بين الكرت وصفحة التفاصيل
+// ==========================================
+/// يلفّ صورة الغلاف بـ [Hero] بوسم موحّد، ويُذوّب زوايا الكرت المستديرة
+/// نحو الصورة الممتدة في صفحة التفاصيل أثناء الطيران (والعكس عند الرجوع).
+class AppHeroImage extends StatelessWidget {
+  final Object tag;
+  final BorderRadius borderRadius;
+  final Widget child;
+
+  const AppHeroImage({
+    super.key,
+    required this.tag,
+    required this.child,
+    this.borderRadius = BorderRadius.zero,
+  });
+
+  /// وسم موحّد لصورة المكان حتى تتعرّف الصفحتان على بعضهما.
+  static String tagForEvent(int eventId) => 'event-cover-$eventId';
+
+  static BorderRadius _radiusOf(BuildContext heroContext) {
+    final host = heroContext.findAncestorWidgetOfExactType<AppHeroImage>();
+    return host?.borderRadius ?? BorderRadius.zero;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Hero(
+      tag: tag,
+      flightShuttleBuilder:
+          (context, animation, direction, fromHeroContext, toHeroContext) {
+            final fromRadius = _radiusOf(fromHeroContext);
+            final toRadius = _radiusOf(toHeroContext);
+
+            // في الرجوع تسير الحركة من 1 إلى 0، فنعكس طرفَي التذويب.
+            final isPush = direction == HeroFlightDirection.push;
+            final begin = isPush ? fromRadius : toRadius;
+            final end = isPush ? toRadius : fromRadius;
+
+            final flying = (toHeroContext.widget as Hero).child;
+
+            return AnimatedBuilder(
+              animation: animation,
+              builder: (context, _) => ClipRRect(
+                borderRadius:
+                    BorderRadius.lerp(begin, end, animation.value) ??
+                    BorderRadius.zero,
+                child: flying,
+              ),
+            );
+          },
+      child: ClipRRect(borderRadius: borderRadius, child: child),
     );
   }
 }
@@ -134,6 +210,10 @@ class AppPageHeader extends StatelessWidget {
   final String? subtitle;
   final IconData icon;
   final bool showBack;
+
+  /// وجهة زر الرجوع. تُمرَّر في الصفحات التي فُتحت بـ pushReplacement
+  /// حيث لا يوجد شيء يُرجَع إليه في المكدّس.
+  final VoidCallback? onBack;
   final Widget? trailing;
   final Widget? bottom;
 
@@ -143,6 +223,7 @@ class AppPageHeader extends StatelessWidget {
     required this.icon,
     this.subtitle,
     this.showBack = false,
+    this.onBack,
     this.trailing,
     this.bottom,
   });
@@ -199,7 +280,8 @@ class AppPageHeader extends StatelessWidget {
                             AppCircleButton(
                               icon: Icons.arrow_back_rounded,
                               tooltip: 'رجوع',
-                              onPressed: () => Navigator.maybePop(context),
+                              onPressed:
+                                  onBack ?? () => Navigator.maybePop(context),
                             ),
                           const Spacer(),
                           ?trailing,

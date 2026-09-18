@@ -156,15 +156,14 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                           child: _FavoritesHeader(count: events.length),
                         ),
                         const SliverToBoxAdapter(child: SizedBox(height: 10)),
-                        SliverList(
-                          delegate: SliverChildBuilderDelegate(
-                            (context, index) => EventCard(
-                              event: events[index],
-                              showPrice: false,
-                              onRemoveFavorite: () =>
-                                  _removeFavorite(events[index]),
-                            ),
-                            childCount: events.length,
+                        SliverList.builder(
+                          itemCount: events.length,
+                          itemBuilder: (context, index) => EventCard(
+                            key: ValueKey(events[index].id),
+                            event: events[index],
+                            showPrice: false,
+                            onRemoveFavorite: () =>
+                                _removeFavorite(events[index]),
                           ),
                         ),
                         const SliverToBoxAdapter(child: SizedBox(height: 140)),

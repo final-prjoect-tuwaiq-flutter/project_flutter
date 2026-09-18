@@ -114,61 +114,69 @@ class _VisitedPlacesScreenState extends State<VisitedPlacesScreen> {
           body: FutureBuilder<List<_VisitedItem>>(
             future: _visitedFuture,
             builder: (context, snapshot) {
-              Widget body;
+              // القائمة تُبنى ككشّاف (sliver) كسول: لا تُنشأ إلا الكروت الظاهرة.
+              Widget bodySliver;
               int? count;
               DateTime? lastVisit;
 
+              Widget boxed(Widget child) => SliverToBoxAdapter(child: child);
+
               if (snapshot.connectionState == ConnectionState.waiting) {
-                body = const SizedBox(height: 520, child: AppListSkeleton());
+                bodySliver = boxed(
+                  const SizedBox(height: 520, child: AppListSkeleton()),
+                );
               } else if (snapshot.hasError) {
                 final isUnauthenticated = snapshot.error
                     .toString()
                     .toLowerCase()
                     .contains('authenticated');
-                body = isUnauthenticated
-                    ? AppStatePanel(
-                        icon: Icons.lock_outline_rounded,
-                        title: 'سجّل الدخول لعرض الأماكن التي زرتها',
-                        actionLabel: 'تسجيل الدخول',
-                        actionIcon: Icons.login_rounded,
-                        onAction: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const LoginPage(),
-                            ),
-                          );
-                        },
-                      )
-                    : AppStatePanel(
-                        icon: Icons.cloud_off_rounded,
-                        title: 'تعذر تحميل الأماكن التي زرتها',
-                        subtitle: snapshot.error.toString(),
-                        actionLabel: 'إعادة المحاولة',
-                        actionIcon: Icons.refresh_rounded,
-                        onAction: _refresh,
-                      );
+                bodySliver = boxed(
+                  isUnauthenticated
+                      ? AppStatePanel(
+                          icon: Icons.lock_outline_rounded,
+                          title: 'سجّل الدخول لعرض الأماكن التي زرتها',
+                          actionLabel: 'تسجيل الدخول',
+                          actionIcon: Icons.login_rounded,
+                          onAction: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const LoginPage(),
+                              ),
+                            );
+                          },
+                        )
+                      : AppStatePanel(
+                          icon: Icons.cloud_off_rounded,
+                          title: 'تعذر تحميل الأماكن التي زرتها',
+                          subtitle: snapshot.error.toString(),
+                          actionLabel: 'إعادة المحاولة',
+                          actionIcon: Icons.refresh_rounded,
+                          onAction: _refresh,
+                        ),
+                );
               } else {
                 final items = snapshot.data ?? [];
                 count = items.length;
                 lastVisit = items.isEmpty ? null : items.first.visitedAt;
-                body = items.isEmpty
-                    ? const AppStatePanel(
-                        icon: Icons.explore_rounded,
-                        title: 'لم تسجّل زيارة أي مكان بعد',
-                        subtitle: 'بعد زيارتك لمكان، سجّلها من صفحة تفاصيل المكان لتظهر هنا.',
+                bodySliver = items.isEmpty
+                    ? boxed(
+                        const AppStatePanel(
+                          icon: Icons.explore_rounded,
+                          title: 'لم تسجّل زيارة أي مكان بعد',
+                          subtitle: 'بعد زيارتك لمكان، سجّلها من صفحة تفاصيل المكان لتظهر هنا.',
+                        ),
                       )
-                    : Padding(
+                    : SliverPadding(
                         padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: Column(
-                          children: [
-                            for (var i = 0; i < items.length; i++)
-                              _VisitedCard(
-                                item: items[i],
-                                isLast: i == items.length - 1,
-                                onDelete: () => _deleteVisit(items[i]),
-                              ),
-                          ],
+                        sliver: SliverList.builder(
+                          itemCount: items.length,
+                          itemBuilder: (context, index) => _VisitedCard(
+                            key: ValueKey(items[index].id),
+                            item: items[index],
+                            isLast: index == items.length - 1,
+                            onDelete: () => _deleteVisit(items[index]),
+                          ),
                         ),
                       );
               }
@@ -176,23 +184,25 @@ class _VisitedPlacesScreenState extends State<VisitedPlacesScreen> {
               return RefreshIndicator(
                 color: colors.accentColor,
                 onRefresh: _refresh,
-                child: ListView(
+                child: CustomScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.only(bottom: 40),
-                  children: [
-                    AppPageHeader(
-                      title: 'زياراتي',
-                      icon: Icons.verified_rounded,
-                      subtitle: lastVisit != null
-                          ? 'آخر زيارة: ${formatArabicDate(lastVisit)}'
-                          : 'سجل الأماكن التي زرتها وملاحظاتك عنها',
-                      showBack: true,
-                      trailing: count == null || count == 0
-                          ? null
-                          : _CountPill(count: count),
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: AppPageHeader(
+                        title: 'زياراتي',
+                        icon: Icons.verified_rounded,
+                        subtitle: lastVisit != null
+                            ? 'آخر زيارة: ${formatArabicDate(lastVisit)}'
+                            : 'سجل الأماكن التي زرتها وملاحظاتك عنها',
+                        showBack: true,
+                        trailing: count == null || count == 0
+                            ? null
+                            : _CountPill(count: count),
+                      ),
                     ),
-                    const SizedBox(height: 22),
-                    body,
+                    const SliverToBoxAdapter(child: SizedBox(height: 22)),
+                    bodySliver,
+                    const SliverToBoxAdapter(child: SizedBox(height: 40)),
                   ],
                 ),
               );
@@ -239,6 +249,7 @@ class _VisitedCard extends StatelessWidget {
   final VoidCallback onDelete;
 
   const _VisitedCard({
+    super.key,
     required this.item,
     required this.isLast,
     required this.onDelete,

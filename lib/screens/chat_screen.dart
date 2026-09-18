@@ -254,7 +254,75 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
         ),
       ),
-      messageListOptions: const MessageListOptions(showDateSeparator: false),
+      messageListOptions: MessageListOptions(
+        showDateSeparator: false,
+        // مؤشّر الكتابة الافتراضي إنجليزي («is typing»)، فنستبدله بمؤشّر عربي.
+        typingBuilder: (user) => _TypingBubble(name: user.getFullName()),
+      ),
+    );
+  }
+}
+
+// ==========================================
+// مؤشّر «يكتب الآن…» بالعربية
+// ==========================================
+class _TypingBubble extends StatelessWidget {
+  final String name;
+
+  const _TypingBubble({required this.name});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = appColors(context);
+
+    return Padding(
+      padding: const EdgeInsetsDirectional.fromSTEB(14, 14, 14, 4),
+      child: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: colors.accentGradient,
+            ),
+            child: const Icon(
+              Icons.auto_awesome_rounded,
+              color: Colors.white,
+              size: 16,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: colors.surfaceColor,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: colors.borderSoft),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TypingIndicator(
+                  flashingCircleDarkColor: colors.textMuted.withValues(
+                    alpha: 0.45,
+                  ),
+                  flashingCircleBrightColor: colors.accentColor,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '$name يكتب الآن…',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: colors.textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

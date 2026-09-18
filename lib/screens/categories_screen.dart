@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:flutter/services.dart';
 import 'package:project_flutter/screens/event_details.dart';
 import 'package:project_flutter/theme/theme.dart';
@@ -34,6 +35,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
   bool _isSortingByNearest = false; // هل تم تفعيل الترتيب؟
   bool _isLoadingLocation = false; // هل يجري تحديد الموقع الآن؟
   Map<int, double> _distancesCache = {}; // خزن المسافات لتجنب إعادة الحساب
+  Position? _lastPosition; // آخر موقع معروف، لإعادة الترتيب دون قراءة GPS جديدة
   int _sortRequestId = 0;
 
   final supabase = Supabase.instance.client;
@@ -75,9 +77,39 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
   }
 
   // ==========================================
+  // زر الترتيب: يُحدّث الترتيب في "الكل"، ويشغّله/يطفئه داخل التصنيفات
+  // ==========================================
+  Future<void> _toggleSortByNearest() async {
+    if (_isLoadingLocation) return;
+
+    // في صفحة "الكل" الترتيب ثابت لا يُطفأ، فالزر يقرأ الموقع من جديد
+    // ويُحدّث ترتيب القائمة.
+    if (_selectedCategoryId == null) {
+      _lastPosition = null;
+      _distancesCache = {};
+      await _sortByNearest();
+      return;
+    }
+
+    // إطفاء الترتيب يُعيد الترتيب الأصلي دون الحاجة لتحديد الموقع من جديد.
+    if (_isSortingByNearest) {
+      setState(() => _isSortingByNearest = false);
+      return;
+    }
+
+    // المسافات محسوبة مسبقاً لنفس التصنيف، فالتشغيل فوري.
+    if (_distancesCache.isNotEmpty) {
+      setState(() => _isSortingByNearest = true);
+      return;
+    }
+
+    await _sortByNearest();
+  }
+
+  // ==========================================
   // دالة تفعيل الترتيب حسب الأقرب
   // ==========================================
-  Future<void> _sortByNearest() async {
+  Future<void> _sortByNearest({bool reuseLastPosition = false}) async {
     // منع الاستدعاء المتكرر أثناء التحميل
     if (_isLoadingLocation) return;
 
@@ -85,8 +117,12 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
     setState(() => _isLoadingLocation = true);
 
     try {
-      // 1. جلب الموقع
-      final position = await determinePosition();
+      // 1. جلب الموقع — عند تغيير التصنيف نكتفي بآخر موقع معروف
+      // حتى لا نقرأ الـ GPS من جديد مع كل ضغطة تصنيف.
+      final position =
+          (reuseLastPosition ? _lastPosition : null) ??
+          await determinePosition();
+      _lastPosition = position;
 
       // 2. جلب الأماكن مباشرة بدل الاعتماد على FutureBuilder
       final events = _selectedCategoryId == null
@@ -194,6 +230,29 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
     _distancesCache = {};
   }
 
+  // ==========================================
+  // اختيار تصنيف، أو الرجوع للصفحة الرئيسية بتمرير null
+  // ==========================================
+  void _selectCategory(Category? category) {
+    // صفحة "الكل" مرتّبة حسب الأقرب دائماً مهما كانت الحالة السابقة؛
+    // أما داخل بقية التصنيفات فلا يعمل الترتيب إلا بضغط المستخدم على الزر.
+    final shouldResort = category == null;
+
+    setState(() {
+      _selectedCategoryId = category?.id;
+      _selectedCategoryName = category?.name;
+      _eventsFuture = category == null
+          ? _fetchAllEvents()
+          : _fetchEvents(category.id);
+      _loadedEvents = null;
+      _sortRequestId++;
+      _isLoadingLocation = false;
+      _resetSortState();
+    });
+
+    if (shouldResort) _sortByNearest(reuseLastPosition: true);
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppCustomColors>()!;
@@ -202,57 +261,57 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
       value: SystemUiOverlayStyle.light,
       child: Directionality(
         textDirection: TextDirection.rtl,
-        child: Scaffold(
-          backgroundColor: colors.creamBackground,
-          extendBody: true,
-          body: Stack(
-            children: [
-              CustomScrollView(
-                physics: const BouncingScrollPhysics(
-                  parent: AlwaysScrollableScrollPhysics(),
+        // زر الرجوع في الجهاز يُعيد المستخدم للصفحة الرئيسية بدل الخروج
+        // من التطبيق ما دام هناك تصنيف مفتوح.
+        child: PopScope(
+          canPop: _selectedCategoryId == null,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop && _selectedCategoryId != null) _selectCategory(null);
+          },
+          child: Scaffold(
+            backgroundColor: colors.creamBackground,
+            extendBody: true,
+            body: Stack(
+              children: [
+                CustomScrollView(
+                  physics: const BouncingScrollPhysics(
+                    parent: AlwaysScrollableScrollPhysics(),
+                  ),
+                  slivers: [
+                    // 1. الواجهة الليلية العلوية (الهوية + التصنيفات)
+                    SliverToBoxAdapter(child: _buildHero(colors)),
+
+                    // 2. عنوان القسم + زر الترتيب حسب الأقرب
+                    SliverToBoxAdapter(child: _buildSectionHeader(colors)),
+
+                    // 3. قسم الأماكن
+                    _buildEventsSliver(colors),
+                  ],
                 ),
-                slivers: [
-                  // 1. الواجهة الليلية العلوية (الهوية + التصنيفات)
-                  SliverToBoxAdapter(child: _buildHero(colors)),
+                const ChatFabButton(bottomOffset: 118),
+              ],
+            ),
 
-                  // 2. عنوان القسم + زر الترتيب حسب الأقرب
-                  SliverToBoxAdapter(child: _buildSectionHeader(colors)),
-
-                  // 3. قسم الأماكن
-                  _buildEventsSliver(colors),
-                ],
-              ),
-              const ChatFabButton(bottomOffset: 118),
-            ],
-          ),
-
-          // 4. البوتوم ناف بار العائم
-          bottomNavigationBar: FloatingBottomNavBar(
-            currentIndex: _currentIndex,
-            onTap: (index) {
-              if (index == 0) {
-                setState(() {
-                  _currentIndex = 0;
-                  _selectedCategoryId = null;
-                  _selectedCategoryName = null;
-                  _eventsFuture = _fetchAllEvents();
-                  _loadedEvents = null;
-                  _sortRequestId++;
-                  _isLoadingLocation = false;
-                  _resetSortState();
-                });
-              } else if (index == 1) {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (_) => const AddPlaceScreen()),
-                );
-              } else if (index == 2) {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (_) => const AccountScreen()),
-                );
-              }
-            },
+            // 4. البوتوم ناف بار العائم
+            bottomNavigationBar: FloatingBottomNavBar(
+              currentIndex: _currentIndex,
+              onTap: (index) {
+                if (index == 0) {
+                  setState(() => _currentIndex = 0);
+                  _selectCategory(null);
+                } else if (index == 1) {
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AddPlaceScreen()),
+                  );
+                } else if (index == 2) {
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AccountScreen()),
+                  );
+                }
+              },
+            ),
           ),
         ),
       ),
@@ -338,53 +397,37 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
   }
 
   Widget _buildBrandRow(AppCustomColors colors) {
+    // الشعار نفسه يحمل اسم التطبيق، فيكفي بجانبه سطر التعريف.
     return Row(
       children: [
-        Container(
-          width: 46,
-          height: 46,
-          decoration: BoxDecoration(
-            gradient: colors.accentGradient,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: colors.accentColor.withValues(alpha: 0.45),
-                blurRadius: 18,
-                offset: const Offset(0, 8),
+        const AppBrandMark(size: 48),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'دليلك للأماكن والفعاليات',
+                style: AppTheme.display(
+                  16.5,
+                  color: Colors.white,
+                  height: 1.2,
+                  letterSpacing: 0.2,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                'اختيارات موثوقة قريبة منك',
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.2,
+                  color: Colors.white.withValues(alpha: 0.5),
+                ),
               ),
             ],
           ),
-          child: const Icon(
-            Icons.festival_rounded,
-            color: Colors.white,
-            size: 24,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'المعزب',
-              style: AppTheme.display(
-                21,
-                color: Colors.white,
-                height: 1.1,
-                letterSpacing: 0.5,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              'دليلك للأماكن والفعاليات',
-              style: TextStyle(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.2,
-                color: Colors.white.withValues(alpha: 0.5),
-              ),
-            ),
-          ],
         ),
       ],
     );
@@ -432,17 +475,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
           return CategoriesHeaderContainer(
             categories: categories,
             selectedCategoryId: _selectedCategoryId,
-            onCategorySelected: (category) {
-              setState(() {
-                _selectedCategoryId = category.id;
-                _selectedCategoryName = category.name;
-                _eventsFuture = _fetchEvents(category.id);
-                _loadedEvents = null;
-                _sortRequestId++;
-                _isLoadingLocation = false;
-                _resetSortState();
-              });
-            },
+            onCategorySelected: _selectCategory,
           );
         },
       ),
@@ -466,20 +499,33 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
   // عنوان القسم وزر الترتيب
   // ==========================================
   Widget _buildSectionHeader(AppCustomColors colors) {
+    final inCategory = _selectedCategoryId != null;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 28, 20, 16),
       child: Row(
         children: [
-          Container(
-            width: 4,
-            height: 24,
-            decoration: BoxDecoration(
-              gradient: colors.accentGradient,
-              borderRadius: BorderRadius.circular(4),
+          // داخل تصنيف: سهم يُعيد للصفحة الرئيسية بدل الشريط الذهبي.
+          if (inCategory)
+            AppCircleButton(
+              icon: Icons.arrow_back_rounded,
+              tooltip: 'رجوع للرئيسية',
+              light: true,
+              size: 36,
+              onPressed: () => _selectCategory(null),
+            )
+          else
+            Container(
+              width: 4,
+              height: 24,
+              decoration: BoxDecoration(
+                gradient: colors.accentGradient,
+                borderRadius: BorderRadius.circular(4),
+              ),
             ),
-          ),
           const SizedBox(width: 12),
-          Flexible(
+          // العنوان يتمدّد ليبقى زر الترتيب ملاصقاً للزاوية اليسرى دائماً.
+          Expanded(
             child: Text(
               _selectedCategoryName ?? 'الأقرب إليك',
               maxLines: 1,
@@ -487,35 +533,36 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
               style: AppTheme.display(21, color: colors.textPrimary),
             ),
           ),
-          const Spacer(),
-          if (_selectedCategoryId != null) _buildSortToggle(colors),
+          const SizedBox(width: 10),
+          _buildSortToggle(colors),
         ],
       ),
     );
   }
 
   Widget _buildSortToggle(AppCustomColors colors) {
-    final isActive = _isSortingByNearest;
+    // ألوان الزر مقلوبة: المُطفأ يأخذ التدرّج الملوّن، والمفعّل يأخذ السطح الفاتح.
+    final filled = !_isSortingByNearest;
 
     return GestureDetector(
-      onTap: _isLoadingLocation ? null : _sortByNearest,
+      onTap: _isLoadingLocation ? null : _toggleSortByNearest,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 220),
         curve: Curves.easeOut,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
         decoration: BoxDecoration(
-          gradient: isActive ? colors.accentGradient : null,
-          color: isActive ? null : colors.surfaceColor,
+          gradient: filled ? colors.accentGradient : null,
+          color: filled ? null : colors.surfaceColor,
           borderRadius: BorderRadius.circular(22),
           border: Border.all(
-            color: isActive ? Colors.transparent : colors.borderSoft,
+            color: filled ? Colors.transparent : colors.borderSoft,
           ),
           boxShadow: [
             BoxShadow(
-              color: isActive
+              color: filled
                   ? colors.accentColor.withValues(alpha: 0.32)
                   : colors.shadowColor.withValues(alpha: 0.05),
-              blurRadius: isActive ? 14 : 8,
+              blurRadius: filled ? 14 : 8,
               offset: const Offset(0, 5),
             ),
           ],
@@ -529,20 +576,20 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                 height: 14,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  color: isActive ? Colors.white : colors.accentColor,
+                  color: filled ? Colors.white : colors.accentColor,
                 ),
               )
             else
               Icon(
                 Icons.near_me_rounded,
                 size: 15,
-                color: isActive ? Colors.white : colors.accentColor,
+                color: filled ? Colors.white : colors.accentColor,
               ),
             const SizedBox(width: 7),
             Text(
               'الأقرب',
               style: TextStyle(
-                color: isActive ? Colors.white : colors.textPrimary,
+                color: filled ? Colors.white : colors.textPrimary,
                 fontWeight: FontWeight.w700,
                 fontSize: 12.5,
               ),
@@ -594,21 +641,32 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
         // تطبيق الترتيب إذا كان مفعلاً
         final sortedEvents = _getSortedEvents(rawEvents);
 
+        // قائمة كسولة: لا يُبنى إلا ما يظهر على الشاشة، والمفاتيح تحافظ على
+        // حالة الكروت عند إعادة الترتيب.
         return SliverPadding(
           padding: const EdgeInsets.only(bottom: 140),
           sliver: SliverList(
-            delegate: SliverChildBuilderDelegate((context, index) {
-              final event = sortedEvents[index];
-              final distanceKm = _distancesCache[event.id];
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                final event = sortedEvents[index];
+                final distanceKm = _distancesCache[event.id];
 
-              return EventCard(
-                event: event,
-                // تمرير المسافة فقط إذا كانت محسوبة ومفعلة
-                distanceText: (_isSortingByNearest && distanceKm != null)
-                    ? _formatDistance(distanceKm)
-                    : null,
-              );
-            }, childCount: sortedEvents.length),
+                return EventCard(
+                  key: ValueKey(event.id),
+                  event: event,
+                  // تمرير المسافة فقط إذا كانت محسوبة ومفعلة
+                  distanceText: (_isSortingByNearest && distanceKm != null)
+                      ? _formatDistance(distanceKm)
+                      : null,
+                );
+              },
+              childCount: sortedEvents.length,
+              findChildIndexCallback: (key) {
+                final id = (key as ValueKey<int>).value;
+                final index = sortedEvents.indexWhere((e) => e.id == id);
+                return index == -1 ? null : index;
+              },
+            ),
           ),
         );
       },
@@ -622,7 +680,9 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
 class CategoriesHeaderContainer extends StatelessWidget {
   final List<Category> categories;
   final int? selectedCategoryId;
-  final ValueChanged<Category> onCategorySelected;
+
+  /// تمرير null يعني العودة للصفحة الرئيسية (كل الأماكن).
+  final ValueChanged<Category?> onCategorySelected;
 
   const CategoriesHeaderContainer({
     super.key,
@@ -657,79 +717,113 @@ class CategoriesHeaderContainer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).extension<AppCustomColors>()!;
-
+    // العنصر الأول "الكل" هو طريق العودة للصفحة الرئيسية بعد اختيار تصنيف.
     return ListView.separated(
       scrollDirection: Axis.horizontal,
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 20),
-      itemCount: categories.length,
+      itemCount: categories.length + 1,
       separatorBuilder: (_, _) => const SizedBox(width: 14),
       itemBuilder: (context, index) {
-        final category = categories[index];
-        final isSelected = category.id == selectedCategoryId;
+        if (index == 0) {
+          return _CategoryChip(
+            label: 'الكل',
+            icon: Icons.grid_view_rounded,
+            isSelected: selectedCategoryId == null,
+            onTap: () => onCategorySelected(null),
+          );
+        }
 
-        return GestureDetector(
+        final category = categories[index - 1];
+
+        return _CategoryChip(
+          label: category.name,
+          icon: iconForCategory(category.name),
+          isSelected: category.id == selectedCategoryId,
           onTap: () => onCategorySelected(category),
-          behavior: HitTestBehavior.opaque,
-          child: SizedBox(
-            width: 74,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 240),
-                  curve: Curves.easeOut,
-                  width: 60,
-                  height: 60,
-                  decoration: BoxDecoration(
-                    gradient: isSelected ? colors.accentGradient : null,
-                    color: isSelected
-                        ? null
-                        : Colors.white.withValues(alpha: 0.07),
-                    borderRadius: BorderRadius.circular(22),
-                    border: Border.all(
-                      color: isSelected
-                          ? Colors.transparent
-                          : Colors.white.withValues(alpha: 0.14),
-                    ),
-                    boxShadow: isSelected
-                        ? [
-                            BoxShadow(
-                              color: colors.accentColor.withValues(alpha: 0.45),
-                              blurRadius: 18,
-                              offset: const Offset(0, 8),
-                            ),
-                          ]
-                        : null,
-                  ),
-                  child: Icon(
-                    iconForCategory(category.name),
-                    color: isSelected
-                        ? Colors.white
-                        : Colors.white.withValues(alpha: 0.7),
-                    size: 25,
-                  ),
-                ),
-                const SizedBox(height: 9),
-                Text(
-                  category.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                    color: isSelected
-                        ? Colors.white
-                        : Colors.white.withValues(alpha: 0.6),
-                  ),
-                ),
-              ],
-            ),
-          ),
         );
       },
+    );
+  }
+}
+
+// ==========================================
+// عنصر واحد داخل شريط التصنيفات
+// ==========================================
+class _CategoryChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _CategoryChip({
+    required this.label,
+    required this.icon,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).extension<AppCustomColors>()!;
+
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox(
+        width: 74,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 240),
+              curve: Curves.easeOut,
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                gradient: isSelected ? colors.accentGradient : null,
+                color: isSelected ? null : Colors.white.withValues(alpha: 0.07),
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(
+                  color: isSelected
+                      ? Colors.transparent
+                      : Colors.white.withValues(alpha: 0.14),
+                ),
+                boxShadow: isSelected
+                    ? [
+                        BoxShadow(
+                          color: colors.accentColor.withValues(alpha: 0.45),
+                          blurRadius: 18,
+                          offset: const Offset(0, 8),
+                        ),
+                      ]
+                    : null,
+              ),
+              child: Icon(
+                icon,
+                color: isSelected
+                    ? Colors.white
+                    : Colors.white.withValues(alpha: 0.7),
+                size: 25,
+              ),
+            ),
+            const SizedBox(height: 9),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                color: isSelected
+                    ? Colors.white
+                    : Colors.white.withValues(alpha: 0.6),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -839,268 +933,281 @@ class EventCard extends StatelessWidget {
             ],
           ),
           child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Stack(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ClipRRect(
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(27),
-                ),
-                child: AspectRatio(
-                  aspectRatio: 16 / 10,
-                  child: Image.network(
-                    event.coverImageUrl ??
-                        'https://via.placeholder.com/400x250',
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => Container(
-                      color: colors.textPrimary.withValues(alpha: 0.06),
-                      child: Icon(
-                        Icons.image_not_supported_rounded,
-                        color: colors.textPrimary.withValues(alpha: 0.25),
-                        size: 38,
+              Stack(
+                children: [
+                  // طرف الانتقال المشترك: الصورة تطير من الكرت إلى صفحة التفاصيل.
+                  AppHeroImage(
+                    tag: AppHeroImage.tagForEvent(event.id),
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(27),
+                    ),
+                    child: AspectRatio(
+                      aspectRatio: 16 / 10,
+                      child: Image.network(
+                        event.coverImageUrl ??
+                            'https://via.placeholder.com/400x250',
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          color: colors.textPrimary.withValues(alpha: 0.06),
+                          child: Icon(
+                            Icons.image_not_supported_rounded,
+                            color: colors.textPrimary.withValues(alpha: 0.25),
+                            size: 38,
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ),
 
-              // تدرّج داكن أسفل الصورة ليبرز الشارات فوقها
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(27),
-                      ),
-                      gradient: LinearGradient(
-                        begin: Alignment.bottomCenter,
-                        end: Alignment.center,
-                        colors: [
-                          colors.inkColor.withValues(alpha: 0.58),
-                          Colors.transparent,
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-
-              if (showPrice)
-                PositionedDirectional(
-                  top: 12,
-                  start: 12,
-                  child: _FrostedPill(
-                    icon: isFree
-                        ? Icons.local_activity_rounded
-                        : Icons.sell_rounded,
-                    label: isFree ? 'مجاني' : 'مدفوع',
-                    background: Colors.white.withValues(alpha: 0.94),
-                    foreground: isFree
-                        ? colors.accentColorDeep
-                        : colors.accentColor,
-                  ),
-                ),
-
-              // زر المفضلة في الزاوية اليمنى العلوية (أو زر الإزالة من المفضلة)
-              PositionedDirectional(
-                top: 12,
-                end: 12,
-                child: ListenableBuilder(
-                  listenable: FavoritesController.instance,
-                  builder: (context, _) {
-                    // في صفحة المفضلة الكرت محفوظ دائماً حتى تتم إزالته.
-                    final isFavorited =
-                        onRemoveFavorite != null ||
-                        FavoritesController.instance.isFavorite(event.id);
-
-                    return Semantics(
-                      button: true,
-                      label: isFavorited
-                          ? 'إزالة من المفضلة'
-                          : 'إضافة إلى المفضلة',
+                  // تدرّج داكن أسفل الصورة ليبرز الشارات فوقها
+                  Positioned.fill(
+                    child: IgnorePointer(
                       child: DecoratedBox(
                         decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: colors.inkColor.withValues(alpha: 0.18),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(27),
+                          ),
+                          gradient: LinearGradient(
+                            begin: Alignment.bottomCenter,
+                            end: Alignment.center,
+                            colors: [
+                              colors.inkColor.withValues(alpha: 0.58),
+                              Colors.transparent,
+                            ],
+                          ),
                         ),
-                        child: Material(
-                          color: Colors.white.withValues(alpha: 0.94),
-                          shape: const CircleBorder(),
-                          clipBehavior: Clip.antiAlias,
-                          child: InkWell(
-                            onTap:
-                                onRemoveFavorite ??
-                                () => _toggleFavorite(context),
-                            child: SizedBox(
-                              width: 38,
-                              height: 38,
-                              child: Icon(
-                                isFavorited
-                                    ? Icons.favorite_rounded
-                                    : Icons.favorite_border_rounded,
-                                color: const Color(0xFFFF4B6E),
-                                size: 19,
+                      ),
+                    ),
+                  ),
+
+                  if (showPrice)
+                    PositionedDirectional(
+                      top: 12,
+                      start: 12,
+                      child: _FrostedPill(
+                        icon: isFree
+                            ? Icons.local_activity_rounded
+                            : Icons.sell_rounded,
+                        label: isFree ? 'مجاني' : 'مدفوع',
+                        background: Colors.white.withValues(alpha: 0.94),
+                        foreground: isFree
+                            ? colors.accentColorDeep
+                            : colors.accentColor,
+                      ),
+                    ),
+
+                  // زر المفضلة في الزاوية اليمنى العلوية (أو زر الإزالة من المفضلة)
+                  PositionedDirectional(
+                    top: 12,
+                    end: 12,
+                    child: ListenableBuilder(
+                      listenable: FavoritesController.instance,
+                      builder: (context, _) {
+                        // في صفحة المفضلة الكرت محفوظ دائماً حتى تتم إزالته.
+                        final isFavorited =
+                            onRemoveFavorite != null ||
+                            FavoritesController.instance.isFavorite(event.id);
+
+                        return Semantics(
+                          button: true,
+                          label: isFavorited
+                              ? 'إزالة من المفضلة'
+                              : 'إضافة إلى المفضلة',
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: colors.inkColor.withValues(
+                                    alpha: 0.18,
+                                  ),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: Material(
+                              color: Colors.white.withValues(alpha: 0.94),
+                              shape: const CircleBorder(),
+                              clipBehavior: Clip.antiAlias,
+                              child: InkWell(
+                                onTap:
+                                    onRemoveFavorite ??
+                                    () => _toggleFavorite(context),
+                                child: SizedBox(
+                                  width: 38,
+                                  height: 38,
+                                  child: Icon(
+                                    isFavorited
+                                        ? Icons.favorite_rounded
+                                        : Icons.favorite_border_rounded,
+                                    color: const Color(0xFFFF4B6E),
+                                    size: 19,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
+                        );
+                      },
+                    ),
+                  ),
+
+                  // شارات أسفل الصورة: المسافة عنك + قرب المترو
+                  PositionedDirectional(
+                    bottom: 12,
+                    start: 12,
+                    end: 12,
+                    child: ListenableBuilder(
+                      listenable: MetroController.instance,
+                      builder: (context, _) {
+                        final metro = MetroController.instance.accessForEvent(
+                          event,
+                        );
+
+                        return Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            if (distanceText != null)
+                              _FrostedPill(
+                                icon: Icons.near_me_rounded,
+                                label: 'يبعد عنك $distanceText',
+                                background: colors.inkColor.withValues(
+                                  alpha: 0.55,
+                                ),
+                                foreground: Colors.white,
+                              ),
+                            if (metro != null && metro.isWalkable)
+                              _FrostedPill(
+                                icon: Icons.directions_subway_rounded,
+                                label: _metroPillLabel(metro.nearest),
+                                background: Colors.white.withValues(
+                                  alpha: 0.94,
+                                ),
+                                foreground:
+                                    metro.nearest.station.lineColor ??
+                                    colors.accentColorDeep,
+                              ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
 
-              // شارات أسفل الصورة: المسافة عنك + قرب المترو
-              PositionedDirectional(
-                bottom: 12,
-                start: 12,
-                end: 12,
-                child: ListenableBuilder(
-                  listenable: MetroController.instance,
-                  builder: (context, _) {
-                    final metro = MetroController.instance.accessForEvent(
-                      event,
-                    );
-
-                    return Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      event.title ?? 'بدون عنوان',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTheme.display(18.5, color: colors.textPrimary),
+                    ),
+                    if (event.shortDescription != null &&
+                        event.shortDescription!.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        event.shortDescription!,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontSize: 12.5,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 14),
+                    Divider(height: 1, thickness: 1, color: colors.borderSoft),
+                    const SizedBox(height: 14),
+                    Row(
                       children: [
-                        if (distanceText != null)
-                          _FrostedPill(
-                            icon: Icons.near_me_rounded,
-                            label: 'يبعد عنك $distanceText',
-                            background: colors.inkColor.withValues(alpha: 0.55),
-                            foreground: Colors.white,
+                        Expanded(
+                          child: workingHours == null
+                              ? const SizedBox.shrink()
+                              : Row(
+                                  children: [
+                                    Icon(
+                                      Icons.schedule_rounded,
+                                      size: 15,
+                                      color: colors.accentColor,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        workingHours,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: theme.textTheme.bodySmall
+                                            ?.copyWith(
+                                              fontSize: 11.5,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                        ),
+                        const SizedBox(width: 10),
+                        GestureDetector(
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  EventDetailsScreen(event: event),
+                            ),
                           ),
-                        if (metro != null && metro.isWalkable)
-                          _FrostedPill(
-                            icon: Icons.directions_subway_rounded,
-                            label: _metroPillLabel(metro.nearest),
-                            background: Colors.white.withValues(alpha: 0.94),
-                            foreground:
-                                metro.nearest.station.lineColor ??
-                                colors.accentColorDeep,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 11,
+                            ),
+                            decoration: BoxDecoration(
+                              gradient: colors.accentGradient,
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: colors.accentColor.withValues(
+                                    alpha: 0.34,
+                                  ),
+                                  blurRadius: 14,
+                                  offset: const Offset(0, 6),
+                                ),
+                              ],
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'التفاصيل',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12.5,
+                                  ),
+                                ),
+                                SizedBox(width: 6),
+                                Icon(
+                                  Icons.arrow_forward_rounded,
+                                  color: Colors.white,
+                                  size: 16,
+                                ),
+                              ],
+                            ),
                           ),
+                        ),
                       ],
-                    );
-                  },
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-
-          Padding(
-            padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  event.title ?? 'بدون عنوان',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTheme.display(18.5, color: colors.textPrimary),
-                ),
-                if (event.shortDescription != null &&
-                    event.shortDescription!.isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    event.shortDescription!,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(fontSize: 12.5),
-                  ),
-                ],
-                const SizedBox(height: 14),
-                Divider(height: 1, thickness: 1, color: colors.borderSoft),
-                const SizedBox(height: 14),
-                Row(
-                  children: [
-                    Expanded(
-                      child: workingHours == null
-                          ? const SizedBox.shrink()
-                          : Row(
-                              children: [
-                                Icon(
-                                  Icons.schedule_rounded,
-                                  size: 15,
-                                  color: colors.accentColor,
-                                ),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    workingHours,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      fontSize: 11.5,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                    ),
-                    const SizedBox(width: 10),
-                    GestureDetector(
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) =>
-                              EventDetailsScreen(event: event),
-                        ),
-                      ),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 11,
-                        ),
-                        decoration: BoxDecoration(
-                          gradient: colors.accentGradient,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: colors.accentColor.withValues(alpha: 0.34),
-                              blurRadius: 14,
-                              offset: const Offset(0, 6),
-                            ),
-                          ],
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'التفاصيل',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 12.5,
-                              ),
-                            ),
-                            SizedBox(width: 6),
-                            Icon(
-                              Icons.arrow_forward_rounded,
-                              color: Colors.white,
-                              size: 16,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
         ),
       ),
     );

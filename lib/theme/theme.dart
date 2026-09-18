@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 /// ==========================================================
 /// هوية التطبيق: "ليل وذهب"
 /// أسود ليلي عميق + تدرّج غروب برتقالي نحو ذهبي.
-/// خط العناوين: El Messiri (أنيق وفخم) — خط الواجهة: Cairo (واضح وعصري).
+/// خط العناوين: ثمانية سيرف ديسبلاي — خط الواجهة: ثمانية سانس (من عائلة خطوط ثمانية).
 /// كل الألوان تُقرأ من [AppCustomColors] لتعمل الواجهات في الوضعين الفاتح والداكن.
 /// ==========================================================
 class AppCustomColors extends ThemeExtension<AppCustomColors> {
@@ -148,6 +147,28 @@ class AppTheme {
   static const Color darkTextMain = Color(0xFFF3EFE8);
   static const Color darkTextSecondary = Color(0xFF9AA1AD);
 
+  /// عائلة خطوط "ثمانية": سيرف ديسبلاي للعناوين، وسانس لبقية الواجهة.
+  static const String displayFontFamily = 'ThmanyahSerifDisplay';
+  static const String bodyFontFamily = 'ThmanyahSans';
+
+  /// خط الواجهة العام (ثمانية سانس) — بديل موحّد لأي نمط نصي في الثيم.
+  static TextStyle body({
+    double? fontSize,
+    FontWeight fontWeight = FontWeight.w500,
+    Color? color,
+    double? height,
+    double? letterSpacing,
+  }) {
+    return TextStyle(
+      fontFamily: bodyFontFamily,
+      fontSize: fontSize,
+      fontWeight: fontWeight,
+      color: color,
+      height: height,
+      letterSpacing: letterSpacing,
+    );
+  }
+
   /// خط العناوين الفاخر. مرّر [color] من [AppCustomColors.textPrimary]
   /// عند استخدامه فوق خلفيات الصفحات ليتوافق مع الوضع الداكن.
   static TextStyle display(
@@ -157,7 +178,8 @@ class AppTheme {
     double height = 1.35,
     double letterSpacing = -0.2,
   }) {
-    return GoogleFonts.elMessiri(
+    return TextStyle(
+      fontFamily: displayFontFamily,
       fontSize: size,
       fontWeight: weight,
       color: color,
@@ -207,9 +229,9 @@ class AppTheme {
       shadowColor: isDark ? Colors.black : baseBlack,
     );
 
-    final cairo = GoogleFonts.cairoTextTheme(
-      isDark ? ThemeData.dark().textTheme : ThemeData.light().textTheme,
-    );
+    final sans =
+        (isDark ? ThemeData.dark().textTheme : ThemeData.light().textTheme)
+            .apply(fontFamily: bodyFontFamily);
     TextStyle heading(double size, {double height = 1.35}) =>
         display(size, color: textMain, height: height);
 
@@ -222,6 +244,7 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: brightness,
+      fontFamily: bodyFontFamily,
       scaffoldBackgroundColor: background,
       splashFactory: InkRipple.splashFactory,
 
@@ -247,34 +270,34 @@ class AppTheme {
 
       extensions: <ThemeExtension<dynamic>>[colors],
 
-      textTheme: cairo.copyWith(
+      textTheme: sans.copyWith(
         displayLarge: heading(34),
         displayMedium: heading(28),
         displaySmall: heading(24),
         headlineMedium: heading(22),
         headlineSmall: heading(20),
         titleLarge: heading(20, height: 1.3),
-        titleMedium: cairo.titleMedium?.copyWith(
+        titleMedium: sans.titleMedium?.copyWith(
           color: textMain,
           fontWeight: FontWeight.w700,
         ),
-        bodyLarge: cairo.bodyLarge?.copyWith(
+        bodyLarge: sans.bodyLarge?.copyWith(
           color: textMain,
           fontWeight: FontWeight.w500,
           height: 1.6,
         ),
-        bodyMedium: cairo.bodyMedium?.copyWith(
+        bodyMedium: sans.bodyMedium?.copyWith(
           color: textMuted,
           fontWeight: FontWeight.w500,
           height: 1.6,
         ),
-        bodySmall: cairo.bodySmall?.copyWith(
+        bodySmall: sans.bodySmall?.copyWith(
           color: textMuted,
           fontWeight: FontWeight.w500,
           height: 1.5,
         ),
-        labelLarge: cairo.labelLarge?.copyWith(fontWeight: FontWeight.w700),
-        labelSmall: cairo.labelSmall?.copyWith(
+        labelLarge: sans.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+        labelSmall: sans.labelSmall?.copyWith(
           fontWeight: FontWeight.w700,
           letterSpacing: 0,
         ),
@@ -299,7 +322,7 @@ class AppTheme {
         selectedColor: colors.accentColorSoft,
         checkmarkColor: accentOrange,
         side: BorderSide(color: border),
-        labelStyle: GoogleFonts.cairo(
+        labelStyle: body(
           color: textMain,
           fontWeight: FontWeight.w700,
           fontSize: 13,
@@ -323,16 +346,13 @@ class AppTheme {
           horizontal: 18,
           vertical: 17,
         ),
-        hintStyle: GoogleFonts.cairo(
+        hintStyle: body(
           color: textMuted.withValues(alpha: 0.8),
           fontSize: 13.5,
           fontWeight: FontWeight.w500,
         ),
-        labelStyle: GoogleFonts.cairo(
-          color: textMuted,
-          fontWeight: FontWeight.w600,
-        ),
-        floatingLabelStyle: GoogleFonts.cairo(
+        labelStyle: body(color: textMuted, fontWeight: FontWeight.w600),
+        floatingLabelStyle: body(
           color: accentOrange,
           fontWeight: FontWeight.w700,
         ),
@@ -357,7 +377,7 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(18),
           ),
-          textStyle: GoogleFonts.cairo(fontWeight: FontWeight.w700),
+          textStyle: body(fontWeight: FontWeight.w700),
         ),
       ),
 
@@ -370,14 +390,14 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(18),
           ),
-          textStyle: GoogleFonts.cairo(fontWeight: FontWeight.w700),
+          textStyle: body(fontWeight: FontWeight.w700),
         ),
       ),
 
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: accentOrange,
-          textStyle: GoogleFonts.cairo(fontWeight: FontWeight.w700),
+          textStyle: body(fontWeight: FontWeight.w700),
         ),
       ),
 
@@ -388,7 +408,7 @@ class AppTheme {
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
         titleTextStyle: heading(20),
-        contentTextStyle: GoogleFonts.cairo(
+        contentTextStyle: body(
           color: textMuted,
           fontSize: 14,
           fontWeight: FontWeight.w500,
@@ -433,7 +453,7 @@ class AppTheme {
         behavior: SnackBarBehavior.floating,
         backgroundColor: isDark ? darkInkSoft : baseBlack,
         actionTextColor: accentGoldLight,
-        contentTextStyle: GoogleFonts.cairo(
+        contentTextStyle: body(
           color: Colors.white,
           fontWeight: FontWeight.w600,
         ),
