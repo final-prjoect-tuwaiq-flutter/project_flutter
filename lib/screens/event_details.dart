@@ -181,7 +181,7 @@ class _ImageGallerySectionState extends State<_ImageGallerySection> {
                 });
               },
               itemBuilder: (context, index) {
-                return Image.network(
+                final image = Image.network(
                   _images[index],
                   fit: BoxFit.cover,
                   errorBuilder: (context, error, stackTrace) => Container(
@@ -192,6 +192,14 @@ class _ImageGallerySectionState extends State<_ImageGallerySection> {
                       color: Colors.white.withValues(alpha: 0.3),
                     ),
                   ),
+                );
+
+                // صورة الغلاف فقط هي الطرف الثاني للانتقال المشترك مع الكرت.
+                if (index != 0) return image;
+
+                return AppHeroImage(
+                  tag: AppHeroImage.tagForEvent(widget.event.id),
+                  child: SizedBox.expand(child: image),
                 );
               },
             ),
@@ -707,9 +715,8 @@ class _MetroAccessSectionState extends State<_MetroAccessSection> {
                 const SizedBox(height: 6),
 
                 // المحطات داخل نطاق المشي، وإلا فأقرب محطة كمرجع
-                for (final entry in (isWalkable
-                    ? access.withinWalk
-                    : [nearest]))
+                for (final entry
+                    in (isWalkable ? access.withinWalk : [nearest]))
                   _MetroStationRow(
                     entry: entry,
                     isNearest: entry == nearest,

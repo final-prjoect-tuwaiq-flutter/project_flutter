@@ -29,11 +29,6 @@ class _SplashScreenState extends State<SplashScreen>
   late final Animation<double> _logo = _phase(0.08, 0.40, Curves.easeOutBack);
   late final Animation<double> _logoFade = _phase(0.08, 0.28, Curves.easeOut);
   late final Animation<double> _rings = _phase(0.30, 0.55, Curves.easeOut);
-  late final Animation<double> _wordmark = _phase(
-    0.36,
-    0.62,
-    Curves.easeInOutCubic,
-  );
   late final Animation<double> _flourish = _phase(
     0.55,
     0.75,
@@ -209,9 +204,7 @@ class _SplashScreenState extends State<SplashScreen>
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         _buildEmblem(colors, t),
-                        const SizedBox(height: 8),
-                        _buildWordmark(colors),
-                        const SizedBox(height: 14),
+                        const SizedBox(height: 18),
                         _buildFlourish(colors),
                         const SizedBox(height: 14),
                         _FadeUp(
@@ -285,7 +278,7 @@ class _SplashScreenState extends State<SplashScreen>
 
   /// الشعار مع حلقات ضوئية تتموّج حوله ولمعة تمرّ عليه.
   Widget _buildEmblem(AppCustomColors colors, double t) {
-    const logoSize = 108.0;
+    const logoSize = 138.0;
 
     return SizedBox(
       width: 280,
@@ -333,38 +326,6 @@ class _SplashScreenState extends State<SplashScreen>
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  /// اسم التطبيق يُكشف من اليمين إلى اليسار كأنه يُكتب.
-  Widget _buildWordmark(AppCustomColors colors) {
-    final v = _wordmark.value;
-
-    return ShaderMask(
-      blendMode: BlendMode.dstIn,
-      shaderCallback: (rect) => LinearGradient(
-        begin: Alignment.centerRight,
-        end: Alignment.centerLeft,
-        colors: const [Colors.white, Colors.white, Colors.transparent],
-        stops: [0, (v * 1.2 - 0.2).clamp(0.0, 1.0), v.clamp(0.0, 1.0)],
-      ).createShader(rect),
-      child: ShaderMask(
-        blendMode: BlendMode.srcIn,
-        shaderCallback: (rect) => LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Colors.white, colors.goldColor],
-        ).createShader(rect),
-        child: Text(
-          'المعزب',
-          style: AppTheme.display(
-            52,
-            color: Colors.white,
-            height: 1.15,
-            letterSpacing: 1,
-          ),
-        ),
       ),
     );
   }
