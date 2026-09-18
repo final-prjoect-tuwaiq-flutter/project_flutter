@@ -214,10 +214,17 @@ project_flutter/
 
 ---
 
-## Made by 
+## 👥 Team
 
-Faisal Alwarthan , Mustafa Alashraf
+This project was passionately developed as a graduation project for the Flutter App Development Bootcamp (Tuwaiq Academy).
 
+* **Faisal Alwarthan** – 
+* **Mustafa Alashraf** – 
+
+---
+<div align="center">
+  Made with ❤️ in Riyadh
+</div>
 ---
 
 ## 📄 License
