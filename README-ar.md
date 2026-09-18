@@ -45,18 +45,17 @@
 ---
 
 ## 📸 لقطات من التطبيق
-
-> ضع لقطات الشاشة داخل مجلد `assets/screenshots/` في الريبو، وسيتم عرضها هنا تلقائيًا.
-
-| الشاشة الرئيسية | تفاصيل المكان | مرشد المعزب (AI) |
+| الترحيب | الشاشة الرئيسية | تفاصيل المكان |
 |:---:|:---:|:---:|
-| <img src="./assets/screenshots/home.jpg" width="220"/> | <img src="./assets/screenshots/details.jpg" width="220"/> | <img src="./assets/screenshots/chatbot.jpg" width="220"/> |
+| <img src="./assets/screenshots/splash.jpg.jpg" width="220"/> | <img src="./assets/screenshots/home.jpg.jpg" width="220"/> | <img src="./assets/screenshots/details.jpg.jpg" width="220"/> <img src="./assets/screenshots/details2.jpg.jpg" width="220"/> |
+
+| مرشد المعزب (AI) | المفضلة | الحفظ |
+|:---:|:---:|:---:|
+| <img src="./assets/screenshots/chatbot.jpg.jpg" width="220"/> | <img src="./assets/screenshots/fav.jpg.jpg" width="220"/> | <img src="./assets/screenshots/visit.jpg.jpg" width="220"/> |
 
 | اقتراح مكان | حساب شريك | حسابي |
 |:---:|:---:|:---:|
-| <img src="./assets/screenshots/suggest_place.jpg" width="220"/> | <img src="./assets/screenshots/partner.jpg" width="220"/> | <img src="./assets/screenshots/profile.jpg" width="220"/> |
-
----
+| <img src="./assets/screenshots/suggest_place.jpg.jpg" width="220"/> | <img src="./assets/screenshots/partner.jpg.jpg" width="220"/> | <img src="./assets/screenshots/profile.jpg.jpg" width="220"/> |
 
 ## ✨ المميزات
 
