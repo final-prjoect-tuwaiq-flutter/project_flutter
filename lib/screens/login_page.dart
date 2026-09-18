@@ -192,7 +192,7 @@ class _LoginPageState extends State<LoginPage> {
             // زر تسجيل الدخول
             AppGradientButton(
               label: 'تسجيل الدخول',
-              icon: Icons.arrow_back_rounded,
+              icon: Icons.arrow_forward_rounded,
               isLoading: _controller.isLoading,
               onPressed: _controller.isLoading
                   ? null

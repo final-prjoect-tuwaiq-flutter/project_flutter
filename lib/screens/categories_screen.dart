@@ -7,7 +7,11 @@ import 'package:project_flutter/widgets/app_ui.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:project_flutter/model/category_model.dart';
 import 'package:project_flutter/model/event.dart';
+import 'package:project_flutter/model/metro_station.dart';
+import 'package:project_flutter/screens/login_page.dart';
+import 'package:project_flutter/service/favorites_controller.dart';
 import 'package:project_flutter/service/location.dart'; // استيراد ملف الموقع
+import 'package:project_flutter/service/metro_controller.dart';
 import 'package:project_flutter/screens/account.dart';
 import 'package:project_flutter/screens/add_place_screen.dart';
 import 'package:project_flutter/widgets/chat_fab_button.dart';
@@ -43,6 +47,8 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
     super.initState();
     _categoriesFuture = _fetchCategories();
     _eventsFuture = _fetchAllEvents();
+    FavoritesController.instance.ensureLoaded();
+    MetroController.instance.ensureLoaded();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _sortByNearest();
     });
@@ -177,16 +183,8 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
   // ==========================================
   // دالة تنسيق عرض المسافة
   // ==========================================
-  String _formatDistance(double distanceInKm) {
-    if (distanceInKm < 1) {
-      // أقل من 1 كم -> تحويل إلى متر
-      final meters = (distanceInKm * 1000).toInt();
-      return '$meters م';
-    } else {
-      // 1 كم أو أكثر -> رقم عشري واحد
-      return '${distanceInKm.toStringAsFixed(1)} كم';
-    }
-  }
+  String _formatDistance(double distanceInKm) =>
+      formatDistanceMeters(distanceInKm * 1000);
 
   // ==========================================
   // إعادة ضبط حالة الترتيب عند تغيير التصنيف
@@ -736,6 +734,14 @@ class CategoriesHeaderContainer extends StatelessWidget {
   }
 }
 
+/// نص شارة المترو على الكرت: «العليا · ٤٢٠ م»، أو المسافة وحدها
+/// إن كان صف المحطة بلا اسم ولا رمز.
+String _metroPillLabel(NearbyStation nearest) {
+  final distance = formatDistanceMeters(nearest.distanceMeters);
+  final name = nearest.station.displayName;
+  return name.isEmpty ? 'المترو $distance' : '$name · $distance';
+}
+
 // ==========================================
 // كرت المكان
 // ==========================================
@@ -743,9 +749,10 @@ class EventCard extends StatelessWidget {
   final Event event;
   final String? distanceText;
   final bool showPrice;
+
+  /// يُمرَّر من صفحة المفضلة فقط، حيث يجب أن يختفي الكرت بعد الإزالة.
+  /// وإلا يتكفّل الكرت بنفسه بالإضافة/الإزالة عبر [FavoritesController].
   final VoidCallback? onRemoveFavorite;
-  final bool isFavorited;
-  final VoidCallback? onFavoriteToggle;
 
   const EventCard({
     super.key,
@@ -753,9 +760,48 @@ class EventCard extends StatelessWidget {
     this.distanceText,
     this.showPrice = true,
     this.onRemoveFavorite,
-    this.isFavorited = false,
-    this.onFavoriteToggle,
   });
+
+  Future<void> _toggleFavorite(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+
+    try {
+      final isNowFavorite = await FavoritesController.instance.toggle(event.id);
+      if (!context.mounted) return;
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            isNowFavorite
+                ? 'تمت إضافة المكان إلى المفضلة'
+                : 'تمت إزالة المكان من المفضلة',
+          ),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } on NotSignedInException {
+      if (!context.mounted) return;
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(
+          content: const Text('يجب تسجيل الدخول للحفظ في المفضلة'),
+          action: SnackBarAction(
+            label: 'تسجيل الدخول',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const LoginPage()),
+            ),
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(content: Text('تعذر تحديث المفضلة: $error')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -860,44 +906,94 @@ class EventCard extends StatelessWidget {
               PositionedDirectional(
                 top: 12,
                 end: 12,
-                child: GestureDetector(
-                  onTap: onRemoveFavorite ?? onFavoriteToggle,
-                  child: Container(
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.94),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: colors.inkColor.withValues(alpha: 0.18),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
+                child: ListenableBuilder(
+                  listenable: FavoritesController.instance,
+                  builder: (context, _) {
+                    // في صفحة المفضلة الكرت محفوظ دائماً حتى تتم إزالته.
+                    final isFavorited =
+                        onRemoveFavorite != null ||
+                        FavoritesController.instance.isFavorite(event.id);
+
+                    return Semantics(
+                      button: true,
+                      label: isFavorited
+                          ? 'إزالة من المفضلة'
+                          : 'إضافة إلى المفضلة',
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: colors.inkColor.withValues(alpha: 0.18),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                    child: Icon(
-                      isFavorited || onRemoveFavorite != null
-                          ? Icons.favorite_rounded
-                          : Icons.favorite_border_rounded,
-                      color: const Color(0xFFFF4B6E),
-                      size: 19,
-                    ),
-                  ),
+                        child: Material(
+                          color: Colors.white.withValues(alpha: 0.94),
+                          shape: const CircleBorder(),
+                          clipBehavior: Clip.antiAlias,
+                          child: InkWell(
+                            onTap:
+                                onRemoveFavorite ??
+                                () => _toggleFavorite(context),
+                            child: SizedBox(
+                              width: 38,
+                              height: 38,
+                              child: Icon(
+                                isFavorited
+                                    ? Icons.favorite_rounded
+                                    : Icons.favorite_border_rounded,
+                                color: const Color(0xFFFF4B6E),
+                                size: 19,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ),
 
-              if (distanceText != null)
-                PositionedDirectional(
-                  bottom: 12,
-                  start: 12,
-                  child: _FrostedPill(
-                    icon: Icons.near_me_rounded,
-                    label: 'يبعد عنك $distanceText',
-                    background: colors.inkColor.withValues(alpha: 0.55),
-                    foreground: Colors.white,
-                  ),
+              // شارات أسفل الصورة: المسافة عنك + قرب المترو
+              PositionedDirectional(
+                bottom: 12,
+                start: 12,
+                end: 12,
+                child: ListenableBuilder(
+                  listenable: MetroController.instance,
+                  builder: (context, _) {
+                    final metro = MetroController.instance.accessForEvent(
+                      event,
+                    );
+
+                    return Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        if (distanceText != null)
+                          _FrostedPill(
+                            icon: Icons.near_me_rounded,
+                            label: 'يبعد عنك $distanceText',
+                            background: colors.inkColor.withValues(alpha: 0.55),
+                            foreground: Colors.white,
+                          ),
+                        if (metro != null && metro.isWalkable)
+                          _FrostedPill(
+                            icon: Icons.directions_subway_rounded,
+                            label: _metroPillLabel(metro.nearest),
+                            background: Colors.white.withValues(alpha: 0.94),
+                            foreground:
+                                metro.nearest.station.lineColor ??
+                                colors.accentColorDeep,
+                          ),
+                      ],
+                    );
+                  },
                 ),
+              ),
             ],
           ),
 
@@ -990,7 +1086,7 @@ class EventCard extends StatelessWidget {
                             ),
                             SizedBox(width: 6),
                             Icon(
-                              Icons.arrow_back_rounded,
+                              Icons.arrow_forward_rounded,
                               color: Colors.white,
                               size: 16,
                             ),
@@ -1040,12 +1136,17 @@ class _FrostedPill extends StatelessWidget {
         children: [
           Icon(icon, size: 13, color: foreground),
           const SizedBox(width: 5),
-          Text(
-            label,
-            style: TextStyle(
-              color: foreground,
-              fontSize: 11.5,
-              fontWeight: FontWeight.w700,
+          // أسماء المحطات قد تطول، فتُقصّ بدل أن تتجاوز عرض الكرت
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: foreground,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ],

@@ -2,11 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:project_flutter/model/partner_account.dart';
 import 'package:project_flutter/screens/favorites_screen.dart';
+import 'package:project_flutter/screens/partner_screen.dart';
 import 'package:project_flutter/screens/categories_screen.dart';
 import 'package:project_flutter/screens/login_page.dart';
 import 'package:project_flutter/screens/add_place_screen.dart';
 import 'package:project_flutter/screens/visited_places_screen.dart';
+import 'package:project_flutter/service/partner_controller.dart';
 import 'package:project_flutter/theme/theme.dart';
 import 'package:project_flutter/theme/theme_controller.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -33,6 +36,7 @@ class _AccountScreenState extends State<AccountScreen> {
     _authSubscription = _supabase.auth.onAuthStateChange.listen((_) {
       if (mounted) setState(() {});
     });
+    PartnerController.instance.ensureLoaded();
   }
 
   @override
@@ -174,6 +178,12 @@ class _AccountScreenState extends State<AccountScreen> {
                           ],
                         ),
                         const SizedBox(height: 28),
+                        const AppSectionTitle(title: 'الشراكة'),
+                        const SizedBox(height: 14),
+                        _PartnerSection(
+                          onRequireSignIn: isSignedIn ? null : _openAuth,
+                        ),
+                        const SizedBox(height: 28),
                         const AppSectionTitle(title: 'المظهر'),
                         const SizedBox(height: 14),
                         const _AppearanceSelector(),
@@ -262,6 +272,64 @@ class _AccountScreenState extends State<AccountScreen> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('هذه الميزة ستتوفر قريباً')));
+  }
+}
+
+// ==========================================
+// بطاقة حساب الشريك (منظّم فعاليات / مالك منشأة)
+// ==========================================
+class _PartnerSection extends StatelessWidget {
+  /// يُمرَّر فقط للزائر غير المسجّل، ليفتح تسجيل الدخول بدل صفحة الشراكة.
+  final VoidCallback? onRequireSignIn;
+
+  const _PartnerSection({required this.onRequireSignIn});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = appColors(context);
+
+    return ListenableBuilder(
+      listenable: PartnerController.instance,
+      builder: (context, _) {
+        final account = PartnerController.instance.account;
+
+        return _TileGroup(
+          children: [
+            _AccountTile(
+              icon: account?.isApproved == true
+                  ? Icons.verified_rounded
+                  : Icons.handshake_rounded,
+              title: switch (account?.status) {
+                PartnerStatus.approved => 'حساب شريك · ${account!.role.label}',
+                PartnerStatus.pending => 'طلب الشراكة قيد المراجعة',
+                PartnerStatus.rejected => 'لم يتم اعتماد طلب الشراكة',
+                null => 'انضم كشريك',
+              },
+              subtitle: switch (account?.status) {
+                PartnerStatus.approved => 'أضف أماكنك وانشرها مباشرة',
+                PartnerStatus.pending => 'سنوافيك بالنتيجة قريباً',
+                PartnerStatus.rejected => 'عدّل بياناتك وأعد الإرسال',
+                null => 'منظّم فعاليات أو مالك منشأة؟ أضف أماكنك بنفسك',
+              },
+              color: account?.isApproved == true
+                  ? const Color(0xFF2F9E62)
+                  : colors.accentColorDeep,
+              badge: account == null ? 'جديد' : account.status.label,
+              onTap: () async {
+                if (onRequireSignIn != null) {
+                  onRequireSignIn!();
+                  return;
+                }
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const PartnerScreen()),
+                );
+              },
+            ),
+          ],
+        );
+      },
+    );
   }
 }
 
@@ -633,7 +701,7 @@ class _AccountTile extends StatelessWidget {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : Icon(
-                      Icons.chevron_left_rounded,
+                      Icons.chevron_right_rounded,
                       size: 22,
                       color: colors.textMuted.withValues(alpha: 0.7),
                     ),

@@ -460,7 +460,7 @@ class _SkipButton extends StatelessWidget {
                 ),
                 const SizedBox(width: 2),
                 Icon(
-                  Icons.chevron_left_rounded,
+                  Icons.chevron_right_rounded,
                   size: 20,
                   color: Colors.white.withValues(alpha: 0.9),
                 ),

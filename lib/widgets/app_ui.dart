@@ -197,7 +197,7 @@ class AppPageHeader extends StatelessWidget {
                         children: [
                           if (showBack)
                             AppCircleButton(
-                              icon: Icons.arrow_forward_rounded,
+                              icon: Icons.arrow_back_rounded,
                               tooltip: 'رجوع',
                               onPressed: () => Navigator.maybePop(context),
                             ),
@@ -387,6 +387,45 @@ class AppIconMedallion extends StatelessWidget {
         borderRadius: BorderRadius.circular(size * 0.36),
       ),
       child: Icon(icon, color: tint, size: size * 0.5),
+    );
+  }
+}
+
+// ==========================================
+// عنوان حقل في النماذج (مع تمييز الحقول المطلوبة)
+// ==========================================
+class AppFieldLabel extends StatelessWidget {
+  final String label;
+  final bool required;
+
+  const AppFieldLabel({super.key, required this.label, this.required = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = appColors(context);
+
+    return Padding(
+      padding: const EdgeInsetsDirectional.only(bottom: 8, start: 4),
+      child: Text.rich(
+        TextSpan(
+          text: label,
+          style: TextStyle(
+            color: colors.textPrimary,
+            fontSize: 13.5,
+            fontWeight: FontWeight.w700,
+          ),
+          children: [
+            TextSpan(
+              text: required ? ' *' : '  (اختياري)',
+              style: TextStyle(
+                color: required ? colors.accentColor : colors.textMuted,
+                fontSize: required ? 13.5 : 11.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -680,3 +719,53 @@ const List<String> kArabicMonths = [
 
 String formatArabicDate(DateTime date) =>
     '${date.day} ${kArabicMonths[date.month - 1]} ${date.year}';
+
+/// يعرض المسافة بالمتر تحت الكيلومتر، وبالكيلومتر بعده: «٤٠٠ م» / «١٫٢ كم».
+String formatDistanceMeters(double meters) {
+  if (meters < 1000) return '${meters.round()} م';
+  return '${(meters / 1000).toStringAsFixed(1)} كم';
+}
+
+// ==========================================
+// صياغة الأعداد بصيغة عربية سليمة
+// ==========================================
+
+/// يصوغ العدد مع معدوده حسب قواعد العربية:
+/// واحد (مكان واحد)، مثنّى (مكانين)، جمع قلّة ٣-١٠ (٥ أماكن)،
+/// ثم تمييز مفرد منصوب ١١-٩٩ (١٥ مكاناً)، ومفرد مجرور لما بعدها (١٠٠ مكان).
+String arabicPlural(
+  int count, {
+  required String singular,
+  required String dual,
+  required String plural,
+  required String accusative,
+  bool feminine = false,
+}) {
+  if (count <= 0) return 'لا توجد $plural';
+  if (count == 1) return '$singular ${feminine ? 'واحدة' : 'واحد'}';
+  if (count == 2) return dual;
+
+  final remainder = count % 100;
+  if (remainder >= 3 && remainder <= 10) return '$count $plural';
+  if (remainder >= 11 && remainder <= 99) return '$count $accusative';
+  return '$count $singular';
+}
+
+/// عدّاد الأماكن: مكان واحد / مكانين / ٧ أماكن / ١٢ مكاناً.
+String arabicPlacesCount(int count) => arabicPlural(
+  count,
+  singular: 'مكان',
+  dual: 'مكانين',
+  plural: 'أماكن',
+  accusative: 'مكاناً',
+);
+
+/// عدّاد الزيارات: زيارة واحدة / زيارتين / ٧ زيارات / ١٢ زيارةً.
+String arabicVisitsCount(int count) => arabicPlural(
+  count,
+  singular: 'زيارة',
+  dual: 'زيارتين',
+  plural: 'زيارات',
+  accusative: 'زيارةً',
+  feminine: true,
+);

@@ -4,7 +4,7 @@ import 'package:project_flutter/model/event.dart';
 import 'package:project_flutter/screens/categories_screen.dart';
 import 'package:project_flutter/screens/account.dart';
 import 'package:project_flutter/screens/add_place_screen.dart';
-import 'package:project_flutter/service/supabase_data.dart';
+import 'package:project_flutter/service/favorites_controller.dart';
 import 'package:project_flutter/widgets/app_ui.dart';
 import 'package:project_flutter/widgets/chat_fab_button.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -28,7 +28,8 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
   }
 
   Future<List<Event>> _loadFavorites() async {
-    final favoriteIds = await SupabaseData().fetchFavorites();
+    await FavoritesController.instance.refresh();
+    final favoriteIds = FavoritesController.instance.ids.toList();
     if (favoriteIds.isEmpty) return [];
 
     final response = await Supabase.instance.client
@@ -54,7 +55,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
     });
 
     try {
-      await SupabaseData().removeFavorite(event.id);
+      await FavoritesController.instance.remove(event.id);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -229,7 +230,7 @@ class _FavoritesHeader extends StatelessWidget {
                 border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
               ),
               child: Text(
-                '$count ${count! <= 10 && count! > 2 ? 'أماكن' : 'مكان'}',
+                arabicPlacesCount(count!),
                 style: TextStyle(
                   color: colors.goldColor,
                   fontSize: 12.5,

@@ -116,6 +116,7 @@ class _VisitedPlacesScreenState extends State<VisitedPlacesScreen> {
             builder: (context, snapshot) {
               Widget body;
               int? count;
+              DateTime? lastVisit;
 
               if (snapshot.connectionState == ConnectionState.waiting) {
                 body = const SizedBox(height: 520, child: AppListSkeleton());
@@ -150,6 +151,7 @@ class _VisitedPlacesScreenState extends State<VisitedPlacesScreen> {
               } else {
                 final items = snapshot.data ?? [];
                 count = items.length;
+                lastVisit = items.isEmpty ? null : items.first.visitedAt;
                 body = items.isEmpty
                     ? const AppStatePanel(
                         icon: Icons.explore_rounded,
@@ -181,7 +183,9 @@ class _VisitedPlacesScreenState extends State<VisitedPlacesScreen> {
                     AppPageHeader(
                       title: 'زياراتي',
                       icon: Icons.verified_rounded,
-                      subtitle: 'سجل الأماكن التي زرتها وملاحظاتك عنها',
+                      subtitle: lastVisit != null
+                          ? 'آخر زيارة: ${formatArabicDate(lastVisit)}'
+                          : 'سجل الأماكن التي زرتها وملاحظاتك عنها',
                       showBack: true,
                       trailing: count == null || count == 0
                           ? null
@@ -217,7 +221,7 @@ class _CountPill extends StatelessWidget {
         border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
       ),
       child: Text(
-        '$count ${count <= 10 && count > 2 ? 'زيارات' : 'زيارة'}',
+        arabicVisitsCount(count),
         style: TextStyle(
           color: colors.goldColor,
           fontSize: 12.5,

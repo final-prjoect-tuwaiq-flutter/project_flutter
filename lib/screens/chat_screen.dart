@@ -289,7 +289,7 @@ class _ChatHeader extends StatelessWidget {
                 child: Row(
                   children: [
                     AppCircleButton(
-                      icon: Icons.arrow_forward_rounded,
+                      icon: Icons.arrow_back_rounded,
                       tooltip: 'رجوع',
                       onPressed: () => Navigator.maybePop(context),
                     ),

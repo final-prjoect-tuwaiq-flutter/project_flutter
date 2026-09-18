@@ -65,7 +65,7 @@ class AuthLayout extends StatelessWidget {
                                           alignment:
                                               AlignmentDirectional.centerStart,
                                           child: AppCircleButton(
-                                            icon: Icons.arrow_forward_rounded,
+                                            icon: Icons.arrow_back_rounded,
                                             tooltip: 'رجوع',
                                             onPressed: () =>
                                                 Navigator.maybePop(context),

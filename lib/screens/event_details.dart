@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:project_flutter/model/event.dart';
+import 'package:project_flutter/model/metro_station.dart';
 import 'package:project_flutter/screens/login_page.dart';
 import 'package:project_flutter/screens/visited_place_screen.dart';
-import 'package:project_flutter/service/supabase_data.dart';
+import 'package:project_flutter/service/favorites_controller.dart';
+import 'package:project_flutter/service/metro_controller.dart';
 import 'package:project_flutter/theme/theme.dart';
 import 'package:project_flutter/widgets/app_ui.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -65,7 +67,10 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                               // المنطقة 4 - الوصف الكامل
                               _DescriptionSection(event: widget.event),
 
-                              // المنطقة 5 - مربع الموقع
+                              // المنطقة 5 - الوصول بالمترو
+                              _MetroAccessSection(event: widget.event),
+
+                              // المنطقة 6 - مربع الموقع
                               _LocationBoxSection(event: widget.event),
 
                               const SizedBox(height: 14),
@@ -79,7 +84,7 @@ class _EventDetailsScreenState extends State<EventDetailsScreen> {
                 ),
               ),
 
-              // المنطقة 6 - زر الحجز (ثابت في الأسفل)
+              // المنطقة 7 - زر الحجز (ثابت في الأسفل)
               _BookNowButton(event: widget.event),
             ],
           ),
@@ -102,10 +107,13 @@ class _ImageGallerySection extends StatefulWidget {
 }
 
 class _ImageGallerySectionState extends State<_ImageGallerySection> {
+  final FavoritesController _favorites = FavoritesController.instance;
+
   int _currentIndex = 0;
-  bool _isFavorite = false;
-  bool _isCheckingFavorite = true;
+  bool _isTogglingFavorite = false;
   late final List<String> _images;
+
+  bool get _isFavorite => _favorites.isFavorite(widget.event.id);
 
   @override
   void initState() {
@@ -119,49 +127,38 @@ class _ImageGallerySectionState extends State<_ImageGallerySection> {
     if (_images.isEmpty) {
       _images.add('https://via.placeholder.com/600x400?text=لا+توجد+صورة');
     }
-    _loadFavoriteStatus();
+    _favorites.addListener(_onFavoritesChanged);
+    _favorites.ensureLoaded();
   }
 
-  Future<void> _loadFavoriteStatus() async {
-    try {
-      final favorites = await SupabaseData().fetchFavorites();
-      if (!mounted) return;
-      setState(() {
-        _isFavorite = favorites.contains(widget.event.id);
-        _isCheckingFavorite = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _isCheckingFavorite = false);
-    }
+  @override
+  void dispose() {
+    _favorites.removeListener(_onFavoritesChanged);
+    super.dispose();
+  }
+
+  void _onFavoritesChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _toggleFavorite() async {
-    final wasFavorite = _isFavorite;
-    setState(() => _isFavorite = !wasFavorite);
+    setState(() => _isTogglingFavorite = true);
 
     try {
-      if (wasFavorite) {
-        await SupabaseData().removeFavorite(widget.event.id);
-      } else {
-        await SupabaseData().addFavorite(widget.event.id);
-      }
+      await _favorites.toggle(widget.event.id);
+    } on NotSignedInException {
+      if (!mounted) return;
+      _showLoginSnackBar(context, 'يجب تسجيل الدخول للحفظ في المفضلة');
     } catch (error) {
       if (!mounted) return;
-      setState(() => _isFavorite = wasFavorite);
-      final isUnauthenticated = error.toString().toLowerCase().contains(
-        'logged in',
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('تعذر تحديث المفضلة: $error'),
+          duration: const Duration(seconds: 3),
+        ),
       );
-      if (isUnauthenticated) {
-        _showLoginSnackBar(context, 'يجب تسجيل الدخول للحفظ في المفضلة');
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('تعذر تحديث المفضلة: $error'),
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
+    } finally {
+      if (mounted) setState(() => _isTogglingFavorite = false);
     }
   }
 
@@ -236,7 +233,7 @@ class _ImageGallerySectionState extends State<_ImageGallerySection> {
                 child: Row(
                   children: [
                     AppCircleButton(
-                      icon: Icons.arrow_forward_rounded,
+                      icon: Icons.arrow_back_rounded,
                       tooltip: 'رجوع',
                       onPressed: () => Navigator.pop(context),
                     ),
@@ -251,7 +248,7 @@ class _ImageGallerySectionState extends State<_ImageGallerySection> {
                       tooltip: _isFavorite
                           ? 'إزالة من المفضلة'
                           : 'حفظ في المفضلة',
-                      onPressed: _isCheckingFavorite ? null : _toggleFavorite,
+                      onPressed: _isTogglingFavorite ? null : _toggleFavorite,
                     ),
                   ],
                 ),
@@ -618,7 +615,322 @@ class _DescriptionSection extends StatelessWidget {
 }
 
 // ==========================================
-// المنطقة 5: مربع الموقع
+// الوصول بالمترو
+// ==========================================
+class _MetroAccessSection extends StatefulWidget {
+  final Event event;
+  const _MetroAccessSection({required this.event});
+
+  @override
+  State<_MetroAccessSection> createState() => _MetroAccessSectionState();
+}
+
+class _MetroAccessSectionState extends State<_MetroAccessSection> {
+  final MetroController _metro = MetroController.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    _metro.addListener(_onMetroChanged);
+    _metro.ensureLoaded();
+  }
+
+  @override
+  void dispose() {
+    _metro.removeListener(_onMetroChanged);
+    super.dispose();
+  }
+
+  void _onMetroChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _openStationInMaps(MetroStation station) async {
+    final uri = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1'
+      '&origin=${station.lat},${station.lng}'
+      '&destination=${widget.event.lat},${widget.event.lng}'
+      '&travelmode=walking',
+    );
+
+    try {
+      if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+        throw Exception('Unable to launch directions');
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تعذر فتح الاتجاهات من المحطة')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final access = _metro.accessForEvent(widget.event);
+
+    // لا نعرض القسم إطلاقاً إن لم تتوفر بيانات المحطات أو إحداثيات المكان.
+    if (access == null) return const SizedBox.shrink();
+
+    final colors = appColors(context);
+    final isWalkable = access.isWalkable;
+    final nearest = access.nearest;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 26),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AppSectionTitle(
+            title: 'الوصول بالمترو',
+            trailing: _MetroVerdictBadge(isWalkable: isWalkable),
+          ),
+          const SizedBox(height: 14),
+          AppSurfaceCard(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isWalkable
+                      ? 'يمكنك الوصول لهذا المكان مشياً من المحطة خلال ${nearest.walkMinutes} دقيقة تقريباً.'
+                      : 'أقرب محطة تبعد ${formatDistanceMeters(nearest.distanceMeters)}، وهي خارج نطاق المشي المريح (${kMetroWalkRadiusMeters.round()} م).',
+                  style: TextStyle(
+                    color: colors.textPrimary,
+                    fontSize: 13,
+                    height: 1.7,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Divider(height: 1, color: colors.borderSoft),
+                const SizedBox(height: 6),
+
+                // المحطات داخل نطاق المشي، وإلا فأقرب محطة كمرجع
+                for (final entry in (isWalkable
+                    ? access.withinWalk
+                    : [nearest]))
+                  _MetroStationRow(
+                    entry: entry,
+                    isNearest: entry == nearest,
+                    onTap: () => _openStationInMaps(entry.station),
+                  ),
+
+                if (isWalkable && access.withinWalk.length > 1) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    '${arabicPlural(access.withinWalk.length, singular: 'محطة', dual: 'محطتين', plural: 'محطات', accusative: 'محطةً', feminine: true)} ضمن ${kMetroWalkRadiusMeters.round()} متر من المكان.',
+                    style: TextStyle(
+                      color: colors.textMuted,
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Icon(
+                Icons.directions_walk_rounded,
+                size: 14,
+                color: colors.textMuted,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'المسافات محسوبة بخط مستقيم وقد تختلف عن مسار المشي الفعلي.',
+                  style: TextStyle(
+                    color: colors.textMuted.withValues(alpha: 0.8),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// شارة «قريب من المترو» / «بعيد عن المترو» بجانب عنوان القسم.
+class _MetroVerdictBadge extends StatelessWidget {
+  final bool isWalkable;
+
+  const _MetroVerdictBadge({required this.isWalkable});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = appColors(context);
+    final color = isWalkable ? const Color(0xFF2F9E62) : colors.textMuted;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isWalkable
+                ? Icons.directions_subway_rounded
+                : Icons.directions_car_rounded,
+            size: 13,
+            color: color,
+          ),
+          const SizedBox(width: 5),
+          Text(
+            isWalkable ? 'قريب من المترو' : 'يفضّل السيارة',
+            style: TextStyle(
+              color: color,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// صف محطة واحدة: اللون والمسار والمسافة وزمن المشي.
+class _MetroStationRow extends StatelessWidget {
+  final NearbyStation entry;
+  final bool isNearest;
+  final VoidCallback onTap;
+
+  const _MetroStationRow({
+    required this.entry,
+    required this.isNearest,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = appColors(context);
+    final station = entry.station;
+    final lineColor = station.lineColor ?? colors.accentColor;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+          child: Row(
+            children: [
+              // شريط لون المسار
+              Container(
+                width: 4,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: lineColor,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            station.displayName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: colors.textPrimary,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        if (isNearest) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: colors.accentColorSoft,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              'الأقرب',
+                              style: TextStyle(
+                                color: colors.accentColor,
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      station.lineName.isEmpty
+                          ? station.stationCode
+                          : station.lineName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: lineColor,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    formatDistanceMeters(entry.distanceMeters),
+                    style: TextStyle(
+                      color: colors.textPrimary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${entry.walkMinutes} د مشياً',
+                    style: TextStyle(
+                      color: colors.textMuted,
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 20,
+                color: colors.textMuted.withValues(alpha: 0.6),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ==========================================
+// المنطقة 6: مربع الموقع
 // ==========================================
 class _LocationBoxSection extends StatelessWidget {
   final Event event;
@@ -723,7 +1035,7 @@ class _LocationBoxSection extends StatelessWidget {
                           ),
                         ),
                         Icon(
-                          Icons.chevron_left_rounded,
+                          Icons.chevron_right_rounded,
                           size: 26,
                           color: colors.goldColor,
                         ),
@@ -924,7 +1236,7 @@ class _BookNowButton extends StatelessWidget {
               child: AppGradientButton(
                 label: _hasTicketUrl ? 'احجز الآن' : 'افتح الموقع',
                 icon: _hasTicketUrl
-                    ? Icons.arrow_back_rounded
+                    ? Icons.arrow_forward_rounded
                     : Icons.location_on_rounded,
                 onPressed: () => _launchAction(context),
               ),
