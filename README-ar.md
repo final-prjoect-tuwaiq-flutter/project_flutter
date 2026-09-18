@@ -177,7 +177,9 @@ project_flutter/
 
 * **فيصل الورثان** – 
 * **مصطفى الاشرف** –
-
+<div align="center">
+  Made with ❤️ in Riyadh
+</div>
 ---
 
 
