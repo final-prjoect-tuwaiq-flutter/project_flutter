@@ -50,37 +50,50 @@ class SignUpController {
     return null;
   }
 
-  Future<bool> signUp(BuildContext context, VoidCallback updateUI) async {
-    if (!formKey.currentState!.validate()) return false;
+  /// نتيجة التسجيل: هل نجح، وهل صار المستخدم مسجّل الدخول فعلاً.
+  ///
+  /// حين يكون تأكيد البريد مفعّلاً في Supabase يعود الطلب بلا جلسة،
+  /// فالحساب أُنشئ لكن المستخدم ليس داخل التطبيق بعد.
+  Future<({bool ok, bool signedIn})> signUp(
+    BuildContext context,
+    VoidCallback updateUI,
+  ) async {
+    if (!formKey.currentState!.validate()) {
+      return (ok: false, signedIn: false);
+    }
+
+    // يُلتقط قبل أي await، فيبقى صالحاً حتى لو زالت الشاشة أثناء الطلب.
+    final messenger = ScaffoldMessenger.of(context);
 
     isLoading = true;
     updateUI();
 
     try {
-      await _supabaseData.signUp(
+      final response = await _supabaseData.signUp(
         email: emailController.text.trim(),
         password: passwordController.text,
       );
       isLoading = false;
       updateUI();
-      return true;
+      return (ok: true, signedIn: response.session != null);
     } on AuthException catch (e) {
       isLoading = false;
       updateUI();
-      _showError(context, e.message);
-      return false;
+      _showError(messenger, e.message);
+      return (ok: false, signedIn: false);
     } catch (e) {
       isLoading = false;
       updateUI();
-      _showError(context, 'حدث خطأ غير متوقع أثناء التسجيل.');
-      return false;
+      _showError(messenger, 'حدث خطأ غير متوقع أثناء التسجيل.');
+      return (ok: false, signedIn: false);
     }
   }
 
-  void _showError(BuildContext context, String message) {
+  void _showError(ScaffoldMessengerState messenger, String message) {
     // يعتمد الشكل والألوان على SnackBarTheme في theme.dart تلقائياً
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 }
 
@@ -189,18 +202,61 @@ class _SignUpPageState extends State<SignUpPage> {
               onPressed: _controller.isLoading
                   ? null
                   : () async {
-                      bool success = await _controller.signUp(
+                      final result = await _controller.signUp(
                         context,
                         () => setState(() {}),
                       );
-                      if (success && context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('تم إنشاء الحساب بنجاح!'),
+                      if (!result.ok || !context.mounted) return;
+
+                      // بلا جلسة يعني أن Supabase ينتظر تأكيد البريد؛
+                      // إدخاله للتطبيق هنا كان يوهمه بأنه مسجّل دخوله
+                      // ثم تفشل عليه المفضلة وإضافة الأماكن بلا سبب واضح.
+                      if (!result.signedIn) {
+                        await showDialog<void>(
+                          context: context,
+                          builder: (dialogContext) => Directionality(
+                            textDirection: TextDirection.rtl,
+                            child: AlertDialog(
+                              icon: const AppIconMedallion(
+                                icon: Icons.mark_email_unread_rounded,
+                                size: 56,
+                              ),
+                              title: const Text('أكّد بريدك الإلكتروني'),
+                              content: Text(
+                                'أرسلنا رابط تفعيل إلى '
+                                '${_controller.emailController.text.trim()}\n\n'
+                                'افتح الرابط ثم عُد لتسجيل الدخول.',
+                                textAlign: TextAlign.center,
+                              ),
+                              actionsAlignment: MainAxisAlignment.center,
+                              actions: [
+                                FilledButton(
+                                  onPressed: () => Navigator.pop(dialogContext),
+                                  child: const Text('حسناً'),
+                                ),
+                              ],
+                            ),
                           ),
                         );
+                        if (!context.mounted) return;
                         Navigator.pushReplacement(
                           context,
+                          MaterialPageRoute(builder: (_) => const LoginPage()),
+                        );
+                        return;
+                      }
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('تم إنشاء الحساب بنجاح!')),
+                      );
+
+                      // الرجوع لما كان يفعله المستخدم قبل التسجيل بدل
+                      // تكديس صفحة رئيسية ثانية فوق الأولى.
+                      final navigator = Navigator.of(context);
+                      if (navigator.canPop()) {
+                        navigator.pop(true);
+                      } else {
+                        navigator.pushReplacement(
                           MaterialPageRoute(
                             builder: (_) => const CategoriesScreen(),
                           ),

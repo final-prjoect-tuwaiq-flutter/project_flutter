@@ -86,6 +86,43 @@ class _VisitedPlacesScreenState extends State<VisitedPlacesScreen> {
   }
 
   Future<void> _deleteVisit(_VisitedItem item) async {
+    // الحذف نهائي ولا يمكن التراجع عنه، وكان يقع بضغطة واحدة بلا تأكيد.
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          icon: const AppIconMedallion(
+            icon: Icons.delete_outline_rounded,
+            color: AppTheme.errorColor,
+            size: 56,
+          ),
+          title: const Text('حذف الزيارة'),
+          content: Text(
+            'سيُحذف سجل زيارتك لـ"${item.event.title ?? 'هذا المكان'}" '
+            'وملاحظاتك عنها نهائياً.',
+            textAlign: TextAlign.center,
+          ),
+          actionsAlignment: MainAxisAlignment.center,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('إلغاء'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppTheme.errorColor,
+              ),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('حذف'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
     try {
       await SupabaseData().delete(id: item.id);
       if (!mounted) return;
@@ -356,21 +393,12 @@ class _VisitedCard extends StatelessWidget {
                                 child: SizedBox(
                                   width: 64,
                                   height: 64,
-                                  child: Image.network(
-                                    event.coverImageUrl ?? '',
-                                    fit: BoxFit.cover,
-                                    errorBuilder:
-                                        (
-                                          context,
-                                          error,
-                                          stackTrace,
-                                        ) => Container(
-                                          color: colors.accentColorSoft,
-                                          child: Icon(
-                                            Icons.image_not_supported_rounded,
-                                            color: colors.accentColor,
-                                          ),
-                                        ),
+                                  child: AppPlaceImage(
+                                    url: event.coverImageUrl,
+                                    // مصغّرة 64px: فك ترميز الصورة كاملة هنا
+                                    // كان يهدر ذاكرة الصور بلا فائدة.
+                                    decodeWidth: 64,
+                                    fallbackIconSize: 22,
                                   ),
                                 ),
                               ),

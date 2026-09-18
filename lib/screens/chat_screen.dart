@@ -22,7 +22,12 @@ class _ChatScreenState extends State<ChatScreen> {
     profileImage: null,
   );
 
-  final List<ChatMessage> _messages = [];
+  /// المحادثة تعيش خارج الشاشة، فالعودة إليها تُكمل الحوار بدل أن تبدأه
+  /// من الصفر بينما النموذج ما زال يتذكّر ما قيل سابقاً.
+  static final List<ChatMessage> _history = [];
+
+  List<ChatMessage> get _messages => _history;
+
   bool _isLoading = true;
   bool _isBotTyping = false;
   String? _errorMessage;
@@ -35,25 +40,33 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _initChat() async {
     try {
-      await _chatService.startNewSession();
+      // ensureSession تعيد استخدام الجلسة القائمة، فلا تُحمّل جدول الأماكن
+      // كاملاً من جديد مع كل فتح للمحادثة.
+      await _chatService.ensureSession();
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _messages.add(
-          ChatMessage(
-            user: _bot,
-            createdAt: DateTime.now(),
-            text:
-                'أهلاً بك! 👋 أنا مرشدك في "المعزب".\n'
-                'أخبرني عن ميزانيتك ونوع الأماكن التي تحبها، وسأساعدك في اختيار المكان الأنسب لك.',
-          ),
-        );
+        if (_history.isEmpty) {
+          _history.add(
+            ChatMessage(
+              user: _bot,
+              createdAt: DateTime.now(),
+              text:
+                  'أهلاً بك! 👋 أنا مرشدك في "المعزب".\n'
+                  'أخبرني عن ميزانيتك ونوع الأماكن التي تحبها، وسأساعدك في اختيار المكان الأنسب لك.',
+            ),
+          );
+        }
       });
     } catch (e) {
+      debugPrint('Gemini session error: $e');
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _errorMessage = e.toString();
+        // تفاصيل الاستثناء تُسجَّل ولا تُعرض: كانت تكشف أسماء نماذج
+        // ومسارات داخلية للمستخدم بلا فائدة له.
+        _errorMessage =
+            'تعذّر تجهيز المرشد الآن. تأكد من اتصالك بالإنترنت وحاول مرة أخرى.';
       });
     }
   }
@@ -84,7 +97,9 @@ class _ChatScreenState extends State<ChatScreen> {
           ChatMessage(
             user: _bot,
             createdAt: DateTime.now(),
-            text: 'حدث خطأ أثناء الاتصال بالمساعد الذكي:\n${e.toString()}',
+            text:
+                'تعذّر الوصول إلى المرشد الآن. تحقق من اتصالك بالإنترنت '
+                'وأعد إرسال رسالتك.',
           ),
         );
       });

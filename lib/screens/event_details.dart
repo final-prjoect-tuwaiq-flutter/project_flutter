@@ -123,10 +123,9 @@ class _ImageGallerySectionState extends State<_ImageGallerySection> {
       if (widget.event.coverImageUrl != null) widget.event.coverImageUrl!,
       if (widget.event.thumbnailUrl != null) widget.event.thumbnailUrl!,
     ];
-    // إذا لم يكن هناك صور، نضع صورة افتراضية
-    if (_images.isEmpty) {
-      _images.add('https://via.placeholder.com/600x400?text=لا+توجد+صورة');
-    }
+    // بلا صور نترك القائمة بعنصر فارغ واحد، فيرسم AppPlaceImage البديل
+    // محلياً بدل الاعتماد على خدمة صور خارجية.
+    if (_images.isEmpty) _images.add('');
     _favorites.addListener(_onFavoritesChanged);
     _favorites.ensureLoaded();
   }
@@ -181,17 +180,10 @@ class _ImageGallerySectionState extends State<_ImageGallerySection> {
                 });
               },
               itemBuilder: (context, index) {
-                final image = Image.network(
-                  _images[index],
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Container(
-                    color: colors.inkSoft,
-                    child: Icon(
-                      Icons.image_not_supported_rounded,
-                      size: 48,
-                      color: Colors.white.withValues(alpha: 0.3),
-                    ),
-                  ),
+                final image = AppPlaceImage(
+                  url: _images[index],
+                  decodeWidth: MediaQuery.sizeOf(context).width,
+                  fallbackIconSize: 48,
                 );
 
                 // صورة الغلاف فقط هي الطرف الثاني للانتقال المشترك مع الكرت.
@@ -806,6 +798,39 @@ class _MetroVerdictBadge extends StatelessWidget {
   }
 }
 
+/// اسم مسار واحد مع نقطة بلونه. المحطة التبادلية تعرض عدة وسوم في سطر واحد.
+class _MetroLineTag extends StatelessWidget {
+  final String label;
+  final Color color;
+
+  const _MetroLineTag({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 7,
+          height: 7,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 5),
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: color,
+            fontSize: 11.5,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 /// صف محطة واحدة: اللون والمسار والمسافة وزمن المشي.
 class _MetroStationRow extends StatelessWidget {
   final NearbyStation entry;
@@ -822,7 +847,11 @@ class _MetroStationRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = appColors(context);
     final station = entry.station;
-    final lineColor = station.lineColor ?? colors.accentColor;
+    final lineColors = [
+      for (final color in station.serviceLineColors)
+        color ?? colors.accentColor,
+    ];
+    final barColors = lineColors.isEmpty ? [colors.accentColor] : lineColors;
 
     return Material(
       color: Colors.transparent,
@@ -833,13 +862,19 @@ class _MetroStationRow extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
           child: Row(
             children: [
-              // شريط لون المسار
-              Container(
-                width: 4,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: lineColor,
-                  borderRadius: BorderRadius.circular(4),
+              // شريط ألوان المسارات: قطعة لكل مسار يخدم المحطة، فتُقرأ
+              // المحطة التبادلية من الشريط وحده.
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: SizedBox(
+                  width: 4,
+                  height: 34,
+                  child: Column(
+                    children: [
+                      for (final color in barColors)
+                        Expanded(child: ColoredBox(color: color)),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -884,19 +919,30 @@ class _MetroStationRow extends StatelessWidget {
                         ],
                       ],
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      station.lineName.isEmpty
-                          ? station.stationCode
-                          : station.lineName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: lineColor,
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w700,
+                    const SizedBox(height: 3),
+                    if (station.serviceLines.isEmpty)
+                      Text(
+                        station.stationCode,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: colors.textMuted,
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      )
+                    else
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 4,
+                        children: [
+                          for (var i = 0; i < station.serviceLines.length; i++)
+                            _MetroLineTag(
+                              label: station.serviceLines[i],
+                              color: lineColors[i],
+                            ),
+                        ],
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -944,10 +990,16 @@ class _LocationBoxSection extends StatelessWidget {
   const _LocationBoxSection({required this.event});
 
   Future<void> _launchLocation(BuildContext context) async {
-    final locationUrl =
-        event.url ??
-        'https://www.google.com/maps/search/?api=1&query=${event.lat},${event.lng}';
-    final uri = Uri.tryParse(locationUrl);
+    // بلا إحداثيات لا يوجد رابط صالح؛ البناء بـ "null,null" كان يفتح
+    // الخرائط على موقع عشوائي بدل إخبار المستخدم بأن الموقع غير متوفر.
+    final hasCoordinates = event.lat != null && event.lng != null;
+    final uri = hasCoordinates
+        ? Uri.tryParse(
+            event.url ??
+                'https://www.google.com/maps/search/?api=1'
+                    '&query=${event.lat},${event.lng}',
+          )
+        : null;
 
     if (uri == null || !uri.hasScheme || !uri.hasAuthority) {
       ScaffoldMessenger.of(context).showSnackBar(

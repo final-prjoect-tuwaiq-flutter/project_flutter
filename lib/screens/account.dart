@@ -118,153 +118,171 @@ class _AccountScreenState extends State<AccountScreen> {
       value: SystemUiOverlayStyle.light,
       child: Directionality(
         textDirection: TextDirection.rtl,
-        child: Scaffold(
-          backgroundColor: colors.creamBackground,
-          extendBody: true,
-          body: Stack(
-            children: [
-              ListView(
-                padding: const EdgeInsets.only(bottom: 140),
-                children: [
-                  _AccountHero(
-                    user: user,
-                    onSignIn: isSignedIn ? null : _openAuth,
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 26, 20, 0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const AppSectionTitle(title: 'اختصاراتي'),
-                        const SizedBox(height: 14),
-                        _TileGroup(
-                          children: [
-                            _AccountTile(
-                              icon: Icons.favorite_rounded,
-                              title: 'مفضلتي',
-                              subtitle: 'الأماكن التي حفظتها',
-                              color: const Color(0xFFE5566F),
-                              onTap: () {
-                                if (!isSignedIn) {
-                                  _openAuth();
-                                  return;
-                                }
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => const FavoritesScreen(),
-                                  ),
-                                );
-                              },
-                            ),
-                            _AccountTile(
-                              icon: Icons.verified_rounded,
-                              title: 'الأماكن التي زرتها',
-                              subtitle: 'سجل زياراتك وملاحظاتك',
-                              color: colors.accentColorDeep,
-                              onTap: () {
-                                if (!isSignedIn) {
-                                  _openAuth();
-                                  return;
-                                }
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => const VisitedPlacesScreen(),
-                                  ),
-                                );
-                              },
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 28),
-                        const AppSectionTitle(title: 'الشراكة'),
-                        const SizedBox(height: 14),
-                        _PartnerSection(
-                          onRequireSignIn: isSignedIn ? null : _openAuth,
-                        ),
-                        const SizedBox(height: 28),
-                        const AppSectionTitle(title: 'المظهر'),
-                        const SizedBox(height: 14),
-                        const _AppearanceSelector(),
-                        const SizedBox(height: 28),
-                        const AppSectionTitle(title: 'التفضيلات'),
-                        const SizedBox(height: 14),
-                        _TileGroup(
-                          children: [
-                            _AccountTile(
-                              icon: Icons.notifications_rounded,
-                              title: 'التنبيهات',
-                              subtitle: 'ستظهر هنا تنبيهاتك قريباً',
-                              color: colors.accentColor,
-                              badge: 'قريباً',
-                              onTap: () => _showComingSoon(context),
-                            ),
-                            _AccountTile(
-                              icon: Icons.tune_rounded,
-                              title: 'الإعدادات',
-                              subtitle: 'تخصيص تجربتك في التطبيق',
-                              color: colors.textMuted,
-                              badge: 'قريباً',
-                              onTap: () => _showComingSoon(context),
-                            ),
-                          ],
-                        ),
-                        if (isSignedIn) ...[
-                          const SizedBox(height: 28),
-                          const AppSectionTitle(title: 'الحساب'),
+        // الصفحة تُفتح بـ pushReplacement من الشريط السفلي، فتصير جذر المكدّس؛
+        // بدون هذا كان زر الرجوع في الجهاز يُغلق التطبيق بدل العودة للرئيسية.
+        child: PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop) _goHome();
+          },
+          child: Scaffold(
+            backgroundColor: colors.creamBackground,
+            extendBody: true,
+            body: Stack(
+              children: [
+                ListView(
+                  padding: const EdgeInsets.only(bottom: 140),
+                  children: [
+                    _AccountHero(
+                      user: user,
+                      onSignIn: isSignedIn ? null : _openAuth,
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 26, 20, 0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const AppSectionTitle(title: 'اختصاراتي'),
                           const SizedBox(height: 14),
                           _TileGroup(
                             children: [
                               _AccountTile(
-                                icon: Icons.logout_rounded,
-                                title: 'تسجيل الخروج',
-                                subtitle: 'الخروج من هذا الجهاز',
-                                color: AppTheme.errorColor,
-                                isDestructive: true,
-                                isLoading: _isSigningOut,
-                                onTap: _isSigningOut ? null : _signOut,
+                                icon: Icons.favorite_rounded,
+                                title: 'مفضلتي',
+                                subtitle: 'الأماكن التي حفظتها',
+                                color: const Color(0xFFE5566F),
+                                onTap: () {
+                                  if (!isSignedIn) {
+                                    _openAuth();
+                                    return;
+                                  }
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => const FavoritesScreen(),
+                                    ),
+                                  );
+                                },
+                              ),
+                              _AccountTile(
+                                icon: Icons.verified_rounded,
+                                title: 'الأماكن التي زرتها',
+                                subtitle: 'سجل زياراتك وملاحظاتك',
+                                color: colors.accentColorDeep,
+                                onTap: () {
+                                  if (!isSignedIn) {
+                                    _openAuth();
+                                    return;
+                                  }
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          const VisitedPlacesScreen(),
+                                    ),
+                                  );
+                                },
                               ),
                             ],
                           ),
-                        ],
-                        const SizedBox(height: 28),
-                        Center(
-                          child: Text(
-                            'المعزب · دليلك للأماكن والفعاليات',
-                            style: TextStyle(
-                              color: colors.textMuted.withValues(alpha: 0.7),
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w600,
+                          const SizedBox(height: 28),
+                          const AppSectionTitle(title: 'الشراكة'),
+                          const SizedBox(height: 14),
+                          _PartnerSection(
+                            onRequireSignIn: isSignedIn ? null : _openAuth,
+                          ),
+                          const SizedBox(height: 28),
+                          const AppSectionTitle(title: 'المظهر'),
+                          const SizedBox(height: 14),
+                          const _AppearanceSelector(),
+                          const SizedBox(height: 28),
+                          const AppSectionTitle(title: 'التفضيلات'),
+                          const SizedBox(height: 14),
+                          _TileGroup(
+                            children: [
+                              _AccountTile(
+                                icon: Icons.notifications_rounded,
+                                title: 'التنبيهات',
+                                subtitle: 'ستظهر هنا تنبيهاتك قريباً',
+                                color: colors.accentColor,
+                                badge: 'قريباً',
+                                onTap: () => _showComingSoon(context),
+                              ),
+                              _AccountTile(
+                                icon: Icons.tune_rounded,
+                                title: 'الإعدادات',
+                                subtitle: 'تخصيص تجربتك في التطبيق',
+                                color: colors.textMuted,
+                                badge: 'قريباً',
+                                onTap: () => _showComingSoon(context),
+                              ),
+                            ],
+                          ),
+                          if (isSignedIn) ...[
+                            const SizedBox(height: 28),
+                            const AppSectionTitle(title: 'الحساب'),
+                            const SizedBox(height: 14),
+                            _TileGroup(
+                              children: [
+                                _AccountTile(
+                                  icon: Icons.logout_rounded,
+                                  title: 'تسجيل الخروج',
+                                  subtitle: 'الخروج من هذا الجهاز',
+                                  color: AppTheme.errorColor,
+                                  isDestructive: true,
+                                  isLoading: _isSigningOut,
+                                  onTap: _isSigningOut ? null : _signOut,
+                                ),
+                              ],
+                            ),
+                          ],
+                          const SizedBox(height: 28),
+                          Center(
+                            child: Text(
+                              'المعزب · دليلك للأماكن والفعاليات',
+                              style: TextStyle(
+                                color: colors.textMuted.withValues(alpha: 0.7),
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              const ChatFabButton(),
-            ],
-          ),
-          bottomNavigationBar: AppBottomNavBar(
-            currentIndex: 2,
-            onTap: (index) {
-              if (index == 0) {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (_) => const CategoriesScreen()),
-                );
-              } else if (index == 1) {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (_) => const AddPlaceScreen()),
-                );
-              }
-            },
+                  ],
+                ),
+                const ChatFabButton(),
+              ],
+            ),
+            bottomNavigationBar: AppBottomNavBar(
+              currentIndex: 2,
+              onTap: (index) {
+                if (index == 0) {
+                  _goHome();
+                } else if (index == 1) {
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AddPlaceScreen()),
+                  );
+                }
+              },
+            ),
           ),
         ),
       ),
+    );
+  }
+
+  /// العودة للصفحة الرئيسية: تُستخدم من الشريط السفلي ومن زر رجوع الجهاز.
+  void _goHome() {
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop();
+      return;
+    }
+    navigator.pushReplacement(
+      MaterialPageRoute(builder: (_) => const CategoriesScreen()),
     );
   }
 

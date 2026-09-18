@@ -80,8 +80,9 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
     if (!mounted) return;
     setState(() {
       // التصنيفات لازمة فقط في وضع النشر المباشر، فنجلبها عند تفعيله.
-      if (_canPublishDirectly)
+      if (_canPublishDirectly) {
         _categoriesFuture ??= SupabaseData().getCategories();
+      }
     });
   }
 
