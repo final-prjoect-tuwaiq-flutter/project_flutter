@@ -46,18 +46,19 @@ This project is the **final graduation project** for the Flutter Development Boo
 
 ---
 
-## 📸 Screenshots
+## 📸 App Screenshots
 
-> Add your screenshots to an `assets/screenshots/` folder in the repo and they will render automatically here.
-
-| Home Screen | Place Details | Details — Metro Info |
+| Splash Screen | Home Screen | Place Details |
 |:---:|:---:|:---:|
-| <img src="./assets/screenshots/home.jpg" width="220"/> | <img src="./assets/screenshots/details.jpg" width="220"/> | <img src="./assets/screenshots/details_metro.jpg" width="220"/> |
+| <img src="./assets/screenshots/splash.jpg.jpg" width="220"/> | <img src="./assets/screenshots/home.jpg.jpg" width="220"/> | <img src="./assets/screenshots/details.jpg.jpg" width="220"/> <img src="./assets/screenshots/details2.jpg.jpg" width="220"/> |
 
-| AI Assistant | Suggest a Place | Partner Account | Profile |
-|:---:|:---:|:---:|:---:|
-| <img src="./assets/screenshots/chatbot.jpg" width="200"/> | <img src="./assets/screenshots/suggest_place.jpg" width="200"/> | <img src="./assets/screenshots/partner.jpg" width="200"/> | <img src="./assets/screenshots/profile.jpg" width="200"/> |
+| AI Guide | Favorites | Saved |
+|:---:|:---:|:---:|
+| <img src="./assets/screenshots/chatbot.jpg.jpg" width="220"/> | <img src="./assets/screenshots/fav.jpg.jpg" width="220"/> | <img src="./assets/screenshots/visit.jpg.jpg" width="220"/> |
 
+| Suggest a Place | Partner Account | Profile |
+|:---:|:---:|:---:|
+| <img src="./assets/screenshots/suggest_place.jpg.jpg" width="220"/> | <img src="./assets/screenshots/partner.jpg.jpg" width="220"/> | <img src="./assets/screenshots/profile.jpg.jpg" width="220"/> |
 ---
 
 ## ✨ Features
@@ -213,11 +214,9 @@ project_flutter/
 
 ---
 
-## 👥 Team
+## Made by 
 
-A graduation project for the **Flutter Development Bootcamp — Tuwaiq Academy**.
-
-<!-- Add team members' names and links here -->
+Faisal Alwarthan , Mustafa Alashraf
 
 ---
 
