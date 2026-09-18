@@ -77,10 +77,19 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
   }
 
   // ==========================================
-  // زر الترتيب: يشغّل الترتيب حسب الأقرب أو يعيد الترتيب الأصلي
+  // زر الترتيب: يُحدّث الترتيب في "الكل"، ويشغّله/يطفئه داخل التصنيفات
   // ==========================================
   Future<void> _toggleSortByNearest() async {
     if (_isLoadingLocation) return;
+
+    // في صفحة "الكل" الترتيب ثابت لا يُطفأ، فالزر يقرأ الموقع من جديد
+    // ويُحدّث ترتيب القائمة.
+    if (_selectedCategoryId == null) {
+      _lastPosition = null;
+      _distancesCache = {};
+      await _sortByNearest();
+      return;
+    }
 
     // إطفاء الترتيب يُعيد الترتيب الأصلي دون الحاجة لتحديد الموقع من جديد.
     if (_isSortingByNearest) {
@@ -225,10 +234,9 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
   // اختيار تصنيف، أو الرجوع للصفحة الرئيسية بتمرير null
   // ==========================================
   void _selectCategory(Category? category) {
-    // الترتيب التلقائي يقتصر على صفحة "الكل"؛ أما داخل بقية التصنيفات
-    // فلا يعمل الترتيب حسب الأقرب إلا بضغط المستخدم على الزر.
-    final shouldResort =
-        category == null && (_isSortingByNearest || _isLoadingLocation);
+    // صفحة "الكل" مرتّبة حسب الأقرب دائماً مهما كانت الحالة السابقة؛
+    // أما داخل بقية التصنيفات فلا يعمل الترتيب إلا بضغط المستخدم على الزر.
+    final shouldResort = category == null;
 
     setState(() {
       _selectedCategoryId = category?.id;
