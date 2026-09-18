@@ -1,9 +1,6 @@
 [saلقراء النسخة العربية ](README-ar.md)
 <div align="center">
 
-**English** | [العربية](./README.ar.md)
-
-<img src="./assets/screenshots/splash.jpg" alt="Al-Muazzab" width="120"/>
 
 # 🏛️ Al-Muazzab (المعزب)
 
