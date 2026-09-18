@@ -38,10 +38,14 @@ class MetroController extends ChangeNotifier {
           .from('metro_stations')
           .select('station_code, station_name, line_name, lat, lng');
 
-      _stations = response
-          .map((json) => MetroStation.tryFromJson(Map<String, dynamic>.from(json)))
+      final rows = response
+          .map(
+            (json) => MetroStation.tryFromJson(Map<String, dynamic>.from(json)),
+          )
           .whereType<MetroStation>()
           .toList();
+
+      _stations = MetroStation.mergeRows(rows);
     } catch (error) {
       // غياب الجدول أو منع القراءة يعني ببساطة إخفاء ميزة المترو.
       debugPrint('تعذر تحميل محطات المترو: $error');

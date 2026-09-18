@@ -22,7 +22,11 @@ void main() {
 
     test('يتجاهل الصفوف بلا إحداثيات بدل أن يرمي استثناءً', () {
       expect(
-        MetroStation.tryFromJson({'station_code': 'X', 'lat': null, 'lng': 1.0}),
+        MetroStation.tryFromJson({
+          'station_code': 'X',
+          'lat': null,
+          'lng': 1.0,
+        }),
         isNull,
       );
       expect(MetroStation.tryFromJson({'station_code': 'X'}), isNull);
@@ -119,6 +123,114 @@ void main() {
 
     test('فارغ إذا غاب الاثنان', () {
       expect(named('', '').displayName, '');
+    });
+  });
+
+  group('دمج المحطات التبادلية', () {
+    MetroStation row(
+      String name,
+      String line, {
+      String code = '',
+      double lat = 24.63,
+      double lng = 46.71,
+    }) => MetroStation(
+      stationCode: code,
+      stationName: name,
+      lineName: line,
+      lat: lat,
+      lng: lng,
+    );
+
+    test('يدمج صفوف المحطة الواحدة في محطة تحمل كل مساراتها', () {
+      final merged = MetroStation.mergeRows([
+        row('قصر الحكم', 'المسار البرتقالي', code: '3A1'),
+        row('قصر الحكم', 'المسار الأزرق', code: '1A5'),
+      ]);
+
+      expect(merged, hasLength(1));
+      expect(merged.single.displayName, 'قصر الحكم');
+      expect(merged.single.serviceLines, ['المسار البرتقالي', 'المسار الأزرق']);
+      expect(merged.single.isInterchange, isTrue);
+    });
+
+    test('لا يدمج محطتين مختلفتين', () {
+      final merged = MetroStation.mergeRows([
+        row('قصر الحكم', 'المسار الأزرق'),
+        row('العليا', 'المسار الأزرق'),
+      ]);
+
+      expect(merged, hasLength(2));
+      expect(merged.every((station) => station.isInterchange), isFalse);
+    });
+
+    test('يطابق الأسماء رغم اختلاف الهمزة والمسافات والتطويل', () {
+      final merged = MetroStation.mergeRows([
+        row('محطة الأمير', 'المسار الأحمر'),
+        row('  محطة الامير ', 'المسار الأصفر'),
+        row('محطة الأميـر', 'المسار الأخضر'),
+      ]);
+
+      expect(merged, hasLength(1));
+      expect(merged.single.serviceLines, hasLength(3));
+    });
+
+    test('لا يكرّر المسار الواحد إذا تكرّر صفه', () {
+      final merged = MetroStation.mergeRows([
+        row('قصر الحكم', 'المسار الأزرق'),
+        row('قصر الحكم', 'المسار الازرق'),
+      ]);
+
+      expect(merged.single.serviceLines, hasLength(1));
+      expect(merged.single.isInterchange, isFalse);
+    });
+
+    test('إحداثيات المحطة المدمجة هي مركز أرصفتها', () {
+      final merged = MetroStation.mergeRows([
+        row('قصر الحكم', 'المسار الأزرق', lat: 24.60, lng: 46.70),
+        row('قصر الحكم', 'المسار البرتقالي', lat: 24.62, lng: 46.72),
+      ]);
+
+      expect(merged.single.lat, closeTo(24.61, 1e-9));
+      expect(merged.single.lng, closeTo(46.71, 1e-9));
+    });
+
+    test('الصفوف بلا اسم تُجمَّع بالرمز لا في محطة واحدة', () {
+      final merged = MetroStation.mergeRows([
+        row('', 'المسار الأزرق', code: 'A'),
+        row('', 'المسار الأحمر', code: 'A'),
+        row('', 'المسار الأصفر', code: 'B'),
+      ]);
+
+      expect(merged, hasLength(2));
+    });
+
+    test('الصفوف بلا اسم ولا رمز تُفرَّق بالإحداثيات', () {
+      final merged = MetroStation.mergeRows([
+        row('', 'المسار الأزرق', lat: 24.1, lng: 46.1),
+        row('', 'المسار الأحمر', lat: 24.9, lng: 46.9),
+      ]);
+
+      expect(merged, hasLength(2));
+    });
+
+    test('الصف الخام يبقى بمسار واحد وألوان مطابقة', () {
+      final single = row('العليا', 'المسار الأزرق');
+
+      expect(single.serviceLines, ['المسار الأزرق']);
+      expect(single.isInterchange, isFalse);
+      expect(single.serviceLineColors, [const Color(0xFF1B67B2)]);
+    });
+
+    test('ألوان المحطة المدمجة بترتيب مساراتها', () {
+      final merged = MetroStation.mergeRows([
+        row('قصر الحكم', 'المسار البرتقالي'),
+        row('قصر الحكم', 'المسار الأزرق'),
+      ]);
+
+      expect(merged.single.serviceLineColors, [
+        const Color(0xFFE8782B),
+        const Color(0xFF1B67B2),
+      ]);
     });
   });
 

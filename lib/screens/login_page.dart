@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:project_flutter/screens/categories_screen.dart';
+import 'package:project_flutter/screens/home_shell.dart';
 import 'package:project_flutter/service/supabase_data.dart';
 import 'package:project_flutter/widgets/app_ui.dart';
 import 'package:project_flutter/widgets/auth_layout.dart';
@@ -17,7 +17,7 @@ class LoginController {
 
   bool isLoading = false;
   bool isPasswordVisible = false;
-  bool rememberMe = false;
+  bool isSendingReset = false;
 
   final SupabaseData _supabaseData = SupabaseData();
 
@@ -45,6 +45,9 @@ class LoginController {
   Future<bool> login(BuildContext context, VoidCallback updateUI) async {
     if (!formKey.currentState!.validate()) return false;
 
+    // يُلتقط قبل أي await، فيبقى صالحاً حتى لو زالت الشاشة أثناء الطلب.
+    final messenger = ScaffoldMessenger.of(context);
+
     isLoading = true;
     updateUI();
 
@@ -59,20 +62,56 @@ class LoginController {
     } on AuthException catch (e) {
       isLoading = false;
       updateUI();
-      _showError(context, e.message);
+      _showMessage(messenger, e.message);
       return false;
     } catch (e) {
       isLoading = false;
       updateUI();
-      _showError(context, 'حدث خطأ غير متوقع. يرجى المحاولة لاحقاً.');
+      _showMessage(messenger, 'حدث خطأ غير متوقع. يرجى المحاولة لاحقاً.');
       return false;
     }
   }
 
-  void _showError(BuildContext context, String message) {
+  /// إرسال رابط إعادة تعيين كلمة المرور إلى بريد المستخدم.
+  /// كان الزر سابقاً بلا أي سلوك، فيبقى من نسي كلمته عالقاً بلا مخرج.
+  Future<void> sendPasswordReset(
+    BuildContext context,
+    VoidCallback updateUI,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final email = emailController.text.trim();
+
+    // إعادة التعيين تحتاج بريداً صالحاً، فنتحقق منه وحده دون بقية الحقول.
+    final emailError = validateEmail(email);
+    if (emailError != null) {
+      _showMessage(
+        messenger,
+        'أدخل بريدك الإلكتروني أولاً لإرسال رابط الاستعادة',
+      );
+      return;
+    }
+
+    isSendingReset = true;
+    updateUI();
+
+    try {
+      await Supabase.instance.client.auth.resetPasswordForEmail(email);
+      _showMessage(messenger, 'أرسلنا رابط إعادة تعيين كلمة المرور إلى $email');
+    } on AuthException catch (e) {
+      _showMessage(messenger, e.message);
+    } catch (_) {
+      _showMessage(messenger, 'تعذر إرسال رابط الاستعادة. حاول لاحقاً.');
+    } finally {
+      isSendingReset = false;
+      updateUI();
+    }
+  }
+
+  void _showMessage(ScaffoldMessengerState messenger, String message) {
     // يعتمد الشكل والألوان على SnackBarTheme في theme.dart تلقائياً
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 }
 
@@ -152,39 +191,23 @@ class _LoginPageState extends State<LoginPage> {
 
             const SizedBox(height: 8),
 
-            // تذكرني ونسيت كلمة المرور
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                InkWell(
-                  borderRadius: BorderRadius.circular(10),
-                  onTap: () => setState(
-                    () => _controller.rememberMe = !_controller.rememberMe,
-                  ),
-                  child: Row(
-                    children: [
-                      Checkbox(
-                        value: _controller.rememberMe,
-                        onChanged: (val) {
-                          setState(() => _controller.rememberMe = val ?? false);
-                        },
+            // الجلسة محفوظة تلقائياً في Supabase، فلا حاجة لخيار "تذكرني"
+            // كان موجوداً بلا أي أثر فعلي على بقاء تسجيل الدخول.
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: TextButton(
+                onPressed: _controller.isSendingReset
+                    ? null
+                    : () => _controller.sendPasswordReset(
+                        context,
+                        () => setState(() {}),
                       ),
-                      Text(
-                        'تذكرني',
-                        style: TextStyle(
-                          color: colors.textPrimary,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13.5,
-                        ),
-                      ),
-                    ],
-                  ),
+                child: Text(
+                  _controller.isSendingReset
+                      ? 'جارٍ الإرسال…'
+                      : 'نسيت كلمة المرور؟',
                 ),
-                TextButton(
-                  onPressed: () {},
-                  child: const Text('نسيت كلمة المرور؟'),
-                ),
-              ],
+              ),
             ),
 
             const SizedBox(height: 18),
@@ -202,54 +225,27 @@ class _LoginPageState extends State<LoginPage> {
                         () => setState(() {}),
                       );
                       if (success && context.mounted) {
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const CategoriesScreen(),
-                          ),
-                        );
+                        // pushReplacement كان يضع صفحة رئيسية ثانية فوق
+                        // الأولى ويفقد المستخدم الشاشة التي جاء منها
+                        // (تفاصيل مكان، المفضلة، الحساب...). الرجوع يُعيده
+                        // إلى حيث كان، وقد صار مسجّلاً دخوله.
+                        final navigator = Navigator.of(context);
+                        if (navigator.canPop()) {
+                          navigator.pop(true);
+                        } else {
+                          navigator.pushReplacement(
+                            MaterialPageRoute(
+                              builder: (_) => const HomeShell(),
+                            ),
+                          );
+                        }
                       }
                     },
             ),
 
-            const SizedBox(height: 28),
-
-            // فاصل أو عبر
-            Row(
-              children: [
-                const Expanded(child: Divider()),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                  child: Text(
-                    'أو عبر',
-                    style: TextStyle(
-                      color: colors.textMuted,
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                const Expanded(child: Divider()),
-              ],
-            ),
-            const SizedBox(height: 20),
-
-            // أزرار التواصل الاجتماعي
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _socialButton(context, Icons.apple),
-                const SizedBox(width: 14),
-                _socialButton(
-                  context,
-                  Icons.g_mobiledata_rounded,
-                  iconSize: 34,
-                ),
-                const SizedBox(width: 14),
-                _socialButton(context, Icons.facebook),
-              ],
-            ),
-
+            // أزرار "أو عبر" (آبل/جوجل/فيسبوك) أُزيلت: لم تكن موصولة بأي
+            // مزوّد OAuth، فكان المستخدم يضغطها ولا يحدث شيء. تُعاد عند
+            // تفعيل المزوّدين فعلياً في Supabase.
             const SizedBox(height: 28),
 
             // رابط إنشاء الحساب
@@ -276,27 +272,6 @@ class _LoginPageState extends State<LoginPage> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  // زر السوشيال ميديا
-  Widget _socialButton(
-    BuildContext context,
-    IconData icon, {
-    double iconSize = 24,
-  }) {
-    final colors = appColors(context);
-    return Container(
-      width: 56,
-      height: 56,
-      decoration: BoxDecoration(
-        color: colors.surfaceColor,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: colors.borderSoft),
-      ),
-      child: Center(
-        child: Icon(icon, color: colors.textPrimary, size: iconSize),
       ),
     );
   }

@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:project_flutter/model/category_model.dart';
-import 'package:project_flutter/screens/account.dart';
-import 'package:project_flutter/screens/categories_screen.dart';
+import 'package:project_flutter/screens/home_shell.dart';
 import 'package:project_flutter/screens/login_page.dart';
 import 'package:project_flutter/screens/partner_screen.dart';
 import 'package:project_flutter/service/partner_controller.dart';
@@ -31,10 +29,10 @@ class AddPlaceScreen extends StatefulWidget {
   const AddPlaceScreen({super.key});
 
   @override
-  State<AddPlaceScreen> createState() => _AddPlaceScreenState();
+  State<AddPlaceScreen> createState() => AddPlaceScreenState();
 }
 
-class _AddPlaceScreenState extends State<AddPlaceScreen> {
+class AddPlaceScreenState extends State<AddPlaceScreen> {
   final PartnerController _partner = PartnerController.instance;
 
   final _formKey = GlobalKey<FormState>();
@@ -80,8 +78,9 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
     if (!mounted) return;
     setState(() {
       // التصنيفات لازمة فقط في وضع النشر المباشر، فنجلبها عند تفعيله.
-      if (_canPublishDirectly)
+      if (_canPublishDirectly) {
         _categoriesFuture ??= SupabaseData().getCategories();
+      }
     });
   }
 
@@ -177,31 +176,62 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
         .showSnackBar(SnackBar(content: Text(message)));
   }
 
-  void _handleNavigation(int index) {
-    if (index == 0) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const CategoriesScreen()),
-      );
-    } else if (index == 2) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const AccountScreen()),
-      );
-    }
+  /// هل كتب المستخدم شيئاً يستحق التحذير قبل مغادرة الصفحة؟
+  bool get _hasUnsavedInput => [
+    _nameController,
+    _locationController,
+    _websiteController,
+    _shortDescriptionController,
+    _fullDescriptionController,
+    _coverImageController,
+    _priceController,
+  ].any((controller) => controller.text.trim().isNotEmpty);
+
+  /// يؤكّد المغادرة إن كان في النموذج مدخلات لم تُرسل بعد.
+  /// كان الرجوع يمسح نموذجاً طويلاً بضغطة واحدة بلا أي تنبيه.
+  Future<bool> _confirmDiscard() async {
+    if (!_hasUnsavedInput || _isSaving) return true;
+
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          icon: const AppIconMedallion(icon: Icons.edit_note_rounded, size: 56),
+          title: const Text('تجاهل ما كتبته؟'),
+          content: const Text(
+            'لم تُرسل بيانات المكان بعد، وستُفقد إذا خرجت الآن.',
+            textAlign: TextAlign.center,
+          ),
+          actionsAlignment: MainAxisAlignment.center,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('متابعة التعبئة'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppTheme.errorColor,
+              ),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('تجاهل'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    return discard == true;
   }
 
-  /// الصفحة تُفتح بـ pushReplacement من الشريط السفلي، فلا يوجد ما يُرجَع إليه
-  /// في المكدّس؛ لذلك نُعيد بناء الصفحة الرئيسية عند تعذّر الرجوع العادي.
-  void _goBack() {
-    final navigator = Navigator.of(context);
-    if (navigator.canPop()) {
-      navigator.pop();
-      return;
-    }
-    navigator.pushReplacement(
-      MaterialPageRoute(builder: (_) => const CategoriesScreen()),
-    );
+  /// يستأذن قبل مغادرة التبويب. يستدعيها [HomeShell] عند تبديل التبويب
+  /// وعند زر رجوع الجهاز، فلا يضيع نموذج ممتلئ بضغطة واحدة.
+  Future<bool> confirmLeave() => _confirmDiscard();
+
+  /// زر الرجوع في ترويسة الصفحة: يعود لتبويب الرئيسية.
+  Future<void> _goBack() async {
+    if (!await _confirmDiscard() || !mounted) return;
+    HomeShellController.instance.goToTab(0);
   }
 
   @override
@@ -209,154 +239,131 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
     final colors = appColors(context);
     final isPartner = _canPublishDirectly;
 
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light,
-      child: Directionality(
-        textDirection: TextDirection.rtl,
-        child: PopScope(
-          canPop: false,
-          onPopInvokedWithResult: (didPop, _) {
-            if (!didPop) _goBack();
-          },
-          child: Scaffold(
-            backgroundColor: colors.creamBackground,
-            extendBody: true,
-            body: Form(
-              key: _formKey,
-              child: ListView(
-                padding: const EdgeInsets.only(bottom: 130),
-                children: [
-                  AppPageHeader(
-                    title: isPartner ? 'أضف مكانك' : 'اقترح مكاناً',
-                    icon: Icons.add_location_alt_rounded,
-                    showBack: true,
-                    onBack: _goBack,
-                    subtitle: isPartner
-                        ? 'بصفتك شريكاً معتمداً، يُنشر المكان في الدليل فور الحفظ.'
-                        : 'شاركنا وجهة تستحق الزيارة، وسنراجعها ونضيفها للدليل.',
-                    trailing: isPartner
-                        ? PartnerStatusChip(status: _partner.account!.status)
-                        : null,
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (isPartner)
-                          const _DirectPublishBanner()
-                        else ...[
-                          const _StepsStrip(),
-                          const SizedBox(height: 20),
-                          const _BecomePartnerCard(),
-                        ],
-                        const SizedBox(height: 24),
-                        const AppSectionTitle(title: 'بيانات المكان'),
-                        const SizedBox(height: 14),
-                        AppSurfaceCard(
-                          padding: const EdgeInsets.all(18),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const AppFieldLabel(
-                                label: 'اسم المكان',
-                                required: true,
-                              ),
-                              TextFormField(
-                                controller: _nameController,
-                                textInputAction: TextInputAction.next,
-                                decoration: const InputDecoration(
-                                  hintText: 'مثال: حديقة الملك عبدالله',
-                                  prefixIcon: Icon(Icons.storefront_rounded),
-                                ),
-                                validator: (value) =>
-                                    value == null || value.trim().isEmpty
-                                    ? 'أدخل اسم المكان'
-                                    : null,
-                              ),
-                              const SizedBox(height: 18),
-                              AppFieldLabel(
-                                label: isPartner
-                                    ? 'الإحداثيات أو رابط الخريطة'
-                                    : 'الموقع',
-                                required: true,
-                              ),
-                              TextFormField(
-                                controller: _locationController,
-                                textInputAction: TextInputAction.next,
-                                decoration: InputDecoration(
-                                  hintText: isPartner
-                                      ? '24.7136, 46.6753'
-                                      : 'العنوان أو رابط الخريطة',
-                                  prefixIcon: const Icon(
-                                    Icons.location_on_rounded,
-                                  ),
-                                ),
-                                validator: (value) {
-                                  final text = value?.trim() ?? '';
-                                  if (text.isEmpty) return 'أدخل موقع المكان';
-                                  if (isPartner && parseLatLng(text) == null) {
-                                    return 'تعذّر استخراج الإحداثيات، أدخلها بصيغة lat, lng';
-                                  }
-                                  return null;
-                                },
-                              ),
-                              const SizedBox(height: 18),
-                              AppFieldLabel(
-                                label: isPartner
-                                    ? 'رابط الحجز أو الموقع الإلكتروني'
-                                    : 'الموقع الإلكتروني',
-                              ),
-                              TextFormField(
-                                controller: _websiteController,
-                                keyboardType: TextInputType.url,
-                                textDirection: TextDirection.ltr,
-                                decoration: const InputDecoration(
-                                  hintText: 'https://',
-                                  prefixIcon: Icon(Icons.link_rounded),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (isPartner) ...[
-                          const SizedBox(height: 24),
-                          const AppSectionTitle(title: 'التصنيف'),
-                          const SizedBox(height: 14),
-                          _buildCategoryPicker(),
-                          const SizedBox(height: 24),
-                          const AppSectionTitle(title: 'الوصف والصورة'),
-                          const SizedBox(height: 14),
-                          _buildDescriptionCard(),
-                          const SizedBox(height: 24),
-                          const AppSectionTitle(title: 'الدخول'),
-                          const SizedBox(height: 14),
-                          _buildPricingCard(),
-                        ] else ...[
-                          const SizedBox(height: 16),
-                          _buildReviewNotice(colors),
-                        ],
-                        const SizedBox(height: 24),
-                        AppGradientButton(
-                          label: isPartner ? 'نشر المكان' : 'إرسال للمراجعة',
-                          icon: isPartner
-                              ? Icons.publish_rounded
-                              : Icons.send_rounded,
-                          isLoading: _isSaving,
-                          onPressed: _isSaving ? null : _submit,
-                        ),
-                      ],
-                    ),
-                  ),
+    // الشاشة تعيش داخل [HomeShell]: الشِّل يملك الـ Scaffold وشريط التنقل
+    // ومعالجة زر الرجوع (ويستأذن عبر [confirmLeave] قبل المغادرة).
+    return Form(
+      key: _formKey,
+      child: ListView(
+        padding: EdgeInsets.only(
+          bottom: AppBottomNavBar.contentBottomPadding(context),
+        ),
+        children: [
+          AppPageHeader(
+            title: isPartner ? 'أضف مكانك' : 'اقترح مكاناً',
+            icon: Icons.add_location_alt_rounded,
+            showBack: true,
+            onBack: _goBack,
+            subtitle: isPartner
+                ? 'بصفتك شريكاً معتمداً، يُنشر المكان في الدليل فور الحفظ.'
+                : 'شاركنا وجهة تستحق الزيارة، وسنراجعها ونضيفها للدليل.',
+            trailing: isPartner
+                ? PartnerStatusChip(status: _partner.account!.status)
+                : null,
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (isPartner)
+                  const _DirectPublishBanner()
+                else ...[
+                  const _StepsStrip(),
+                  const SizedBox(height: 20),
+                  const _BecomePartnerCard(),
                 ],
-              ),
-            ),
-            bottomNavigationBar: AppBottomNavBar(
-              currentIndex: 1,
-              onTap: _handleNavigation,
+                const SizedBox(height: 24),
+                const AppSectionTitle(title: 'بيانات المكان'),
+                const SizedBox(height: 14),
+                AppSurfaceCard(
+                  padding: const EdgeInsets.all(18),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const AppFieldLabel(label: 'اسم المكان', required: true),
+                      TextFormField(
+                        controller: _nameController,
+                        textInputAction: TextInputAction.next,
+                        decoration: const InputDecoration(
+                          hintText: 'مثال: حديقة الملك عبدالله',
+                          prefixIcon: Icon(Icons.storefront_rounded),
+                        ),
+                        validator: (value) =>
+                            value == null || value.trim().isEmpty
+                            ? 'أدخل اسم المكان'
+                            : null,
+                      ),
+                      const SizedBox(height: 18),
+                      AppFieldLabel(
+                        label: isPartner
+                            ? 'الإحداثيات أو رابط الخريطة'
+                            : 'الموقع',
+                        required: true,
+                      ),
+                      TextFormField(
+                        controller: _locationController,
+                        textInputAction: TextInputAction.next,
+                        decoration: InputDecoration(
+                          hintText: isPartner
+                              ? '24.7136, 46.6753'
+                              : 'العنوان أو رابط الخريطة',
+                          prefixIcon: const Icon(Icons.location_on_rounded),
+                        ),
+                        validator: (value) {
+                          final text = value?.trim() ?? '';
+                          if (text.isEmpty) return 'أدخل موقع المكان';
+                          if (isPartner && parseLatLng(text) == null) {
+                            return 'تعذّر استخراج الإحداثيات، أدخلها بصيغة lat, lng';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 18),
+                      AppFieldLabel(
+                        label: isPartner
+                            ? 'رابط الحجز أو الموقع الإلكتروني'
+                            : 'الموقع الإلكتروني',
+                      ),
+                      TextFormField(
+                        controller: _websiteController,
+                        keyboardType: TextInputType.url,
+                        textDirection: TextDirection.ltr,
+                        decoration: const InputDecoration(
+                          hintText: 'https://',
+                          prefixIcon: Icon(Icons.link_rounded),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (isPartner) ...[
+                  const SizedBox(height: 24),
+                  const AppSectionTitle(title: 'التصنيف'),
+                  const SizedBox(height: 14),
+                  _buildCategoryPicker(),
+                  const SizedBox(height: 24),
+                  const AppSectionTitle(title: 'الوصف والصورة'),
+                  const SizedBox(height: 14),
+                  _buildDescriptionCard(),
+                  const SizedBox(height: 24),
+                  const AppSectionTitle(title: 'الدخول'),
+                  const SizedBox(height: 14),
+                  _buildPricingCard(),
+                ] else ...[
+                  const SizedBox(height: 16),
+                  _buildReviewNotice(colors),
+                ],
+                const SizedBox(height: 24),
+                AppGradientButton(
+                  label: isPartner ? 'نشر المكان' : 'إرسال للمراجعة',
+                  icon: isPartner ? Icons.publish_rounded : Icons.send_rounded,
+                  isLoading: _isSaving,
+                  onPressed: _isSaving ? null : _submit,
+                ),
+              ],
             ),
           ),
-        ),
+        ],
       ),
     );
   }

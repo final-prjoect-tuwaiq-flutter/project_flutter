@@ -11,14 +11,39 @@ class GeminiChatService {
 
   static final GeminiChatService instance = GeminiChatService._internal();
 
-  static const _modelName = 'gemini-3.6-flash';
+  /// اسم النموذج قابل للضبط من `.env` حتى لا يحتاج تغييره إلى إصدار جديد
+  /// من التطبيق عند تحديث أسماء نماذج Gemini.
+  static const _fallbackModelName = 'gemini-2.5-flash';
+
+  String get _modelName {
+    final configured = dotenv.env['GEMINI_MODEL']?.trim();
+    return configured == null || configured.isEmpty
+        ? _fallbackModelName
+        : configured;
+  }
 
   final SupabaseData _data = SupabaseData();
 
   ChatSession? _chatSession;
   bool _isReady = false;
 
+  /// الجلسة مبنية على بيانات مستخدم بعينه (مفضّلته)، فتُلغى عند تغيّر الحساب.
+  String? _sessionUserId;
+
   bool get isReady => _isReady;
+
+  /// يجهّز الجلسة إن لم تكن جاهزة، ويعيد استخدامها فيما عدا ذلك.
+  ///
+  /// بناء الجلسة يحمّل جدول الأماكن كاملاً ويضعه في تعليمات النظام؛ تكراره
+  /// مع كل فتح للمحادثة كان يعني طلب شبكة ثقيلاً وفاتورة رموز كاملة في كل
+  /// مرة، مع ضياع سياق الحوار السابق.
+  Future<void> ensureSession() async {
+    final currentUserId = _data.supabase.auth.currentUser?.id;
+    if (_isReady && _chatSession != null && _sessionUserId == currentUserId) {
+      return;
+    }
+    await startNewSession();
+  }
 
   Future<void> startNewSession() async {
     final apiKey = dotenv.env['GEMINI_API_KEY'];
@@ -38,13 +63,12 @@ class GeminiChatService {
     );
 
     _chatSession = model.startChat();
+    _sessionUserId = _data.supabase.auth.currentUser?.id;
     _isReady = true;
   }
 
   Future<String> sendMessage(String text) async {
-    if (_chatSession == null) {
-      await startNewSession();
-    }
+    await ensureSession();
 
     final response = await _chatSession!.sendMessage(Content.text(text));
     final reply = response.text?.trim();
@@ -58,6 +82,8 @@ class GeminiChatService {
     final results = await Future.wait([
       _data.getCategories(),
       _fetchAllPlaces(),
+      // fetchFavorites تُرجع قائمة فارغة للزائر غير المسجّل، فالمرشد
+      // يعمل بلا تسجيل دخول أيضاً.
       _data.fetchFavorites(),
     ]);
 

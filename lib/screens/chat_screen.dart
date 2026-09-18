@@ -22,7 +22,12 @@ class _ChatScreenState extends State<ChatScreen> {
     profileImage: null,
   );
 
-  final List<ChatMessage> _messages = [];
+  /// المحادثة تعيش خارج الشاشة، فالعودة إليها تُكمل الحوار بدل أن تبدأه
+  /// من الصفر بينما النموذج ما زال يتذكّر ما قيل سابقاً.
+  static final List<ChatMessage> _history = [];
+
+  List<ChatMessage> get _messages => _history;
+
   bool _isLoading = true;
   bool _isBotTyping = false;
   String? _errorMessage;
@@ -35,25 +40,65 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _initChat() async {
     try {
+      // ensureSession تعيد استخدام الجلسة القائمة، فلا تُحمّل جدول الأماكن
+      // كاملاً من جديد مع كل فتح للمحادثة.
+      await _chatService.ensureSession();
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        if (_history.isEmpty) {
+          _history.add(
+            ChatMessage(
+              user: _bot,
+              createdAt: DateTime.now(),
+              text:
+                  'أهلاً بك! 👋 أنا مرشدك في "المعزب".\n'
+                  'أخبرني عن ميزانيتك ونوع الأماكن التي تحبها، وسأساعدك في اختيار المكان الأنسب لك.',
+            ),
+          );
+        }
+      });
+    } catch (e) {
+      debugPrint('Gemini session error: $e');
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        // تفاصيل الاستثناء تُسجَّل ولا تُعرض: كانت تكشف أسماء نماذج
+        // ومسارات داخلية للمستخدم بلا فائدة له.
+        _errorMessage =
+            'تعذّر تجهيز المرشد الآن. تأكد من اتصالك بالإنترنت وحاول مرة أخرى.';
+      });
+    }
+  }
+
+  /// يمسح المحادثة ويبدأ جلسة جديدة (ويُحدِّث قائمة الأماكن في تعليمات النظام).
+  Future<void> _resetConversation() async {
+    setState(() {
+      _history.clear();
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
       await _chatService.startNewSession();
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _messages.add(
+        _history.add(
           ChatMessage(
             user: _bot,
             createdAt: DateTime.now(),
-            text:
-                'أهلاً بك! 👋 أنا مرشدك في "المعزب".\n'
-                'أخبرني عن ميزانيتك ونوع الأماكن التي تحبها، وسأساعدك في اختيار المكان الأنسب لك.',
+            text: 'بدأنا محادثة جديدة. بمَ أساعدك؟',
           ),
         );
       });
-    } catch (e) {
+    } catch (error) {
+      debugPrint('Gemini reset error: $error');
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _errorMessage = e.toString();
+        _errorMessage =
+            'تعذّر تجهيز المرشد الآن. تأكد من اتصالك بالإنترنت وحاول مرة أخرى.';
       });
     }
   }
@@ -84,7 +129,9 @@ class _ChatScreenState extends State<ChatScreen> {
           ChatMessage(
             user: _bot,
             createdAt: DateTime.now(),
-            text: 'حدث خطأ أثناء الاتصال بالمساعد الذكي:\n${e.toString()}',
+            text:
+                'تعذّر الوصول إلى المرشد الآن. تحقق من اتصالك بالإنترنت '
+                'وأعد إرسال رسالتك.',
           ),
         );
       });
@@ -103,7 +150,12 @@ class _ChatScreenState extends State<ChatScreen> {
           backgroundColor: colors.creamBackground,
           body: Column(
             children: [
-              _ChatHeader(isTyping: _isBotTyping),
+              _ChatHeader(
+                isTyping: _isBotTyping,
+                onReset: (_isLoading || _isBotTyping || _history.length <= 1)
+                    ? null
+                    : _resetConversation,
+              ),
               Expanded(child: _buildBody(colors)),
             ],
           ),
@@ -330,7 +382,10 @@ class _TypingBubble extends StatelessWidget {
 class _ChatHeader extends StatelessWidget {
   final bool isTyping;
 
-  const _ChatHeader({required this.isTyping});
+  /// يُعطَّل أثناء التجهيز أو حين تكون المحادثة فارغة أصلاً.
+  final VoidCallback? onReset;
+
+  const _ChatHeader({required this.isTyping, this.onReset});
 
   @override
   Widget build(BuildContext context) {
@@ -420,6 +475,14 @@ class _ChatHeader extends StatelessWidget {
                           ),
                         ],
                       ),
+                    ),
+                    // المحادثة تبقى محفوظة بين الفتحات، فلا بد من مخرج
+                    // لبدئها من جديد بدل أن تكبر بلا نهاية.
+                    AppCircleButton(
+                      icon: Icons.refresh_rounded,
+                      tooltip: 'محادثة جديدة',
+                      onPressed: onReset,
+                      size: 38,
                     ),
                   ],
                 ),

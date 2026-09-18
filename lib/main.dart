@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:project_flutter/app_locale.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:project_flutter/screens/categories_screen.dart';
+import 'package:project_flutter/screens/home_shell.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:project_flutter/screens/splash_screen.dart';
 import 'package:project_flutter/theme/theme.dart'; // مسار ملف الثيم الجديد
@@ -11,13 +12,19 @@ import 'package:project_flutter/theme/theme_controller.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // تحميل متغيرات البيئة (مفتاح Gemini API وغيره)
-  await dotenv.load(fileName: '.env');
+  // تحميل متغيرات البيئة (مفتاح Gemini API وغيره).
+  // غياب الملف كان يُسقط التطبيق قبل أن يظهر أي شيء؛ الآن يعمل التطبيق
+  // كاملاً عدا المرشد الذكي، وهو يعرض رسالته الخاصة عند غياب المفتاح.
+  try {
+    await dotenv.load(fileName: '.env');
+  } catch (error) {
+    debugPrint('تعذر تحميل ملف .env: $error');
+  }
 
   // تهيئة Supabase (تأكد من وضع روابط مشروعك هنا)
   await Supabase.initialize(
     url: 'https://rzeetjsmiakievpthjxy.supabase.co/',
-    anonKey: 'sb_publishable_QGi8lP0L6UvblvlmGXElEQ_QFU9ASxN',
+    publishableKey: 'sb_publishable_QGi8lP0L6UvblvlmGXElEQ_QFU9ASxN',
   );
 
   // تحميل المظهر المحفوظ (فاتح / داكن / حسب النظام)
@@ -39,6 +46,20 @@ class MyApp extends StatelessWidget {
         theme: AppTheme.lightTheme,
         darkTheme: AppTheme.darkTheme,
         themeMode: themeMode,
+        // لغة الواجهة عربية ثابتة، ومندوبو الترجمة يجعلون ودجتس ماتيريال
+        // (منتقي التاريخ، قوائم نسخ/لصق، أزرار الحوارات) عربية أيضاً.
+        locale: kAppLocale,
+        localizationsDelegates: kAppLocalizationsDelegates,
+        supportedLocales: kAppSupportedLocales,
+        // الواجهة مبنية على ارتفاعات ثابتة (شرائح التصنيفات، الشارات،
+        // الشريط السفلي)، وتكبير خط النظام بلا حدّ يكسرها بأشرطة التجاوز.
+        // الحدّ الأعلى يحفظ التخطيط مع احترام تكبير معقول للمستخدم؛ ورفعه
+        // يتطلب جعل تلك الارتفاعات مرنة أولاً.
+        builder: (context, child) => MediaQuery.withClampedTextScaling(
+          minScaleFactor: 0.9,
+          maxScaleFactor: 1.3,
+          child: child ?? const SizedBox.shrink(),
+        ),
         home: SplashScreen(nextBuilder: (_) => const AuthWrapper()),
       ),
     );
@@ -53,6 +74,6 @@ class AuthWrapper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const CategoriesScreen();
+    return const HomeShell();
   }
 }

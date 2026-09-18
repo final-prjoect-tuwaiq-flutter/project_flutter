@@ -1,13 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:project_flutter/model/partner_account.dart';
 import 'package:project_flutter/screens/favorites_screen.dart';
 import 'package:project_flutter/screens/partner_screen.dart';
-import 'package:project_flutter/screens/categories_screen.dart';
 import 'package:project_flutter/screens/login_page.dart';
-import 'package:project_flutter/screens/add_place_screen.dart';
 import 'package:project_flutter/screens/visited_places_screen.dart';
 import 'package:project_flutter/service/partner_controller.dart';
 import 'package:project_flutter/theme/theme.dart';
@@ -45,11 +42,26 @@ class _AccountScreenState extends State<AccountScreen> {
     super.dispose();
   }
 
-  Future<void> _openAuth() async {
+  /// يفتح تسجيل الدخول ويُرجع ما إذا صار المستخدم مسجّلاً بعده.
+  Future<bool> _openAuth() async {
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const LoginPage()),
     );
+    if (!mounted) return false;
+    setState(() {});
+    return _supabase.auth.currentUser != null;
+  }
+
+  /// يفتح صفحة تتطلب تسجيل الدخول: يطلبه أولاً ثم يُكمل إلى الوجهة.
+  /// كان الزائر يُعاد إلى صفحة الحساب بعد الدخول وعليه الضغط مرة أخرى.
+  Future<void> _openGated(WidgetBuilder builder) async {
+    if (_supabase.auth.currentUser == null) {
+      final signedIn = await _openAuth();
+      if (!signedIn || !mounted) return;
+    }
+    if (!mounted) return;
+    await Navigator.push(context, MaterialPageRoute(builder: builder));
     if (mounted) setState(() {});
   }
 
@@ -114,157 +126,111 @@ class _AccountScreenState extends State<AccountScreen> {
     final isSignedIn = user != null;
     final colors = appColors(context);
 
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light,
-      child: Directionality(
-        textDirection: TextDirection.rtl,
-        child: Scaffold(
-          backgroundColor: colors.creamBackground,
-          extendBody: true,
-          body: Stack(
-            children: [
-              ListView(
-                padding: const EdgeInsets.only(bottom: 140),
+    // الشاشة تعيش داخل [HomeShell]: الشِّل يملك الـ Scaffold وشريط التنقل
+    // ومعالجة زر الرجوع.
+    return Stack(
+      children: [
+        ListView(
+          padding: EdgeInsets.only(
+            bottom: AppBottomNavBar.contentBottomPadding(context),
+          ),
+          children: [
+            _AccountHero(user: user, onSignIn: isSignedIn ? null : _openAuth),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 26, 20, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _AccountHero(
-                    user: user,
-                    onSignIn: isSignedIn ? null : _openAuth,
+                  const AppSectionTitle(title: 'اختصاراتي'),
+                  const SizedBox(height: 14),
+                  _TileGroup(
+                    children: [
+                      _AccountTile(
+                        icon: Icons.favorite_rounded,
+                        title: 'مفضلتي',
+                        subtitle: 'الأماكن التي حفظتها',
+                        color: const Color(0xFFE5566F),
+                        onTap: () => _openGated((_) => const FavoritesScreen()),
+                      ),
+                      _AccountTile(
+                        icon: Icons.verified_rounded,
+                        title: 'الأماكن التي زرتها',
+                        subtitle: 'سجل زياراتك وملاحظاتك',
+                        color: colors.accentColorDeep,
+                        onTap: () =>
+                            _openGated((_) => const VisitedPlacesScreen()),
+                      ),
+                    ],
                   ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 26, 20, 0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                  const SizedBox(height: 28),
+                  const AppSectionTitle(title: 'الشراكة'),
+                  const SizedBox(height: 14),
+                  _PartnerSection(
+                    onOpen: () => _openGated((_) => const PartnerScreen()),
+                  ),
+                  const SizedBox(height: 28),
+                  const AppSectionTitle(title: 'المظهر'),
+                  const SizedBox(height: 14),
+                  const _AppearanceSelector(),
+                  const SizedBox(height: 28),
+                  const AppSectionTitle(title: 'التفضيلات'),
+                  const SizedBox(height: 14),
+                  _TileGroup(
+                    children: [
+                      _AccountTile(
+                        icon: Icons.notifications_rounded,
+                        title: 'التنبيهات',
+                        subtitle: 'ستظهر هنا تنبيهاتك قريباً',
+                        color: colors.accentColor,
+                        badge: 'قريباً',
+                        onTap: () => _showComingSoon(context),
+                      ),
+                      _AccountTile(
+                        icon: Icons.tune_rounded,
+                        title: 'الإعدادات',
+                        subtitle: 'تخصيص تجربتك في التطبيق',
+                        color: colors.textMuted,
+                        badge: 'قريباً',
+                        onTap: () => _showComingSoon(context),
+                      ),
+                    ],
+                  ),
+                  if (isSignedIn) ...[
+                    const SizedBox(height: 28),
+                    const AppSectionTitle(title: 'الحساب'),
+                    const SizedBox(height: 14),
+                    _TileGroup(
                       children: [
-                        const AppSectionTitle(title: 'اختصاراتي'),
-                        const SizedBox(height: 14),
-                        _TileGroup(
-                          children: [
-                            _AccountTile(
-                              icon: Icons.favorite_rounded,
-                              title: 'مفضلتي',
-                              subtitle: 'الأماكن التي حفظتها',
-                              color: const Color(0xFFE5566F),
-                              onTap: () {
-                                if (!isSignedIn) {
-                                  _openAuth();
-                                  return;
-                                }
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => const FavoritesScreen(),
-                                  ),
-                                );
-                              },
-                            ),
-                            _AccountTile(
-                              icon: Icons.verified_rounded,
-                              title: 'الأماكن التي زرتها',
-                              subtitle: 'سجل زياراتك وملاحظاتك',
-                              color: colors.accentColorDeep,
-                              onTap: () {
-                                if (!isSignedIn) {
-                                  _openAuth();
-                                  return;
-                                }
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => const VisitedPlacesScreen(),
-                                  ),
-                                );
-                              },
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 28),
-                        const AppSectionTitle(title: 'الشراكة'),
-                        const SizedBox(height: 14),
-                        _PartnerSection(
-                          onRequireSignIn: isSignedIn ? null : _openAuth,
-                        ),
-                        const SizedBox(height: 28),
-                        const AppSectionTitle(title: 'المظهر'),
-                        const SizedBox(height: 14),
-                        const _AppearanceSelector(),
-                        const SizedBox(height: 28),
-                        const AppSectionTitle(title: 'التفضيلات'),
-                        const SizedBox(height: 14),
-                        _TileGroup(
-                          children: [
-                            _AccountTile(
-                              icon: Icons.notifications_rounded,
-                              title: 'التنبيهات',
-                              subtitle: 'ستظهر هنا تنبيهاتك قريباً',
-                              color: colors.accentColor,
-                              badge: 'قريباً',
-                              onTap: () => _showComingSoon(context),
-                            ),
-                            _AccountTile(
-                              icon: Icons.tune_rounded,
-                              title: 'الإعدادات',
-                              subtitle: 'تخصيص تجربتك في التطبيق',
-                              color: colors.textMuted,
-                              badge: 'قريباً',
-                              onTap: () => _showComingSoon(context),
-                            ),
-                          ],
-                        ),
-                        if (isSignedIn) ...[
-                          const SizedBox(height: 28),
-                          const AppSectionTitle(title: 'الحساب'),
-                          const SizedBox(height: 14),
-                          _TileGroup(
-                            children: [
-                              _AccountTile(
-                                icon: Icons.logout_rounded,
-                                title: 'تسجيل الخروج',
-                                subtitle: 'الخروج من هذا الجهاز',
-                                color: AppTheme.errorColor,
-                                isDestructive: true,
-                                isLoading: _isSigningOut,
-                                onTap: _isSigningOut ? null : _signOut,
-                              ),
-                            ],
-                          ),
-                        ],
-                        const SizedBox(height: 28),
-                        Center(
-                          child: Text(
-                            'المعزب · دليلك للأماكن والفعاليات',
-                            style: TextStyle(
-                              color: colors.textMuted.withValues(alpha: 0.7),
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
+                        _AccountTile(
+                          icon: Icons.logout_rounded,
+                          title: 'تسجيل الخروج',
+                          subtitle: 'الخروج من هذا الجهاز',
+                          color: AppTheme.errorColor,
+                          isDestructive: true,
+                          isLoading: _isSigningOut,
+                          onTap: _isSigningOut ? null : _signOut,
                         ),
                       ],
+                    ),
+                  ],
+                  const SizedBox(height: 28),
+                  Center(
+                    child: Text(
+                      'المعزب · دليلك للأماكن والفعاليات',
+                      style: TextStyle(
+                        color: colors.textMuted.withValues(alpha: 0.7),
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ],
               ),
-              const ChatFabButton(),
-            ],
-          ),
-          bottomNavigationBar: AppBottomNavBar(
-            currentIndex: 2,
-            onTap: (index) {
-              if (index == 0) {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (_) => const CategoriesScreen()),
-                );
-              } else if (index == 1) {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (_) => const AddPlaceScreen()),
-                );
-              }
-            },
-          ),
+            ),
+          ],
         ),
-      ),
+        const ChatFabButton(),
+      ],
     );
   }
 
@@ -279,10 +245,10 @@ class _AccountScreenState extends State<AccountScreen> {
 // بطاقة حساب الشريك (منظّم فعاليات / مالك منشأة)
 // ==========================================
 class _PartnerSection extends StatelessWidget {
-  /// يُمرَّر فقط للزائر غير المسجّل، ليفتح تسجيل الدخول بدل صفحة الشراكة.
-  final VoidCallback? onRequireSignIn;
+  /// يفتح صفحة الشراكة، ويطلب تسجيل الدخول أولاً للزائر ثم يُكمل إليها.
+  final VoidCallback onOpen;
 
-  const _PartnerSection({required this.onRequireSignIn});
+  const _PartnerSection({required this.onOpen});
 
   @override
   Widget build(BuildContext context) {
@@ -315,16 +281,7 @@ class _PartnerSection extends StatelessWidget {
                   ? const Color(0xFF2F9E62)
                   : colors.accentColorDeep,
               badge: account == null ? 'جديد' : account.status.label,
-              onTap: () async {
-                if (onRequireSignIn != null) {
-                  onRequireSignIn!();
-                  return;
-                }
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const PartnerScreen()),
-                );
-              },
+              onTap: () => onOpen(),
             ),
           ],
         );

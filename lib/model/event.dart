@@ -276,12 +276,19 @@ class Event {
       lat: (json['lat'] as num?)?.toDouble(),
       lng: (json['lng'] as num?)?.toDouble(),
       mCategory: json['m_category']?.toString(),
-      url: "https://www.google.com/maps/place/${json['lat']},${json['lng']}",
+      // بلا إحداثيات لا يوجد رابط خرائط صالح؛ تركه null يجعل الواجهة
+      // تعرض «الموقع غير متوفر» بدل فتح الخرائط على موقع خاطئ.
+      url: _mapsUrl(json['lat'], json['lng']),
 
       // التعديل هنا لقراءة البيانات بشكل صحيح من Supabase
       closedDays: _parseClosedDays(json['closed_days']),
       times: _parseTimes(json['times']),
     );
+  }
+
+  static String? _mapsUrl(dynamic lat, dynamic lng) {
+    if (lat == null || lng == null) return null;
+    return 'https://www.google.com/maps/search/?api=1&query=$lat,$lng';
   }
 
   static Map<dynamic, dynamic>? _parseTimes(dynamic value) {
@@ -293,13 +300,16 @@ class Event {
         final cleaned = text.replaceAll(RegExp(r',\s*}'), '}');
         final decoded = jsonDecode(cleaned);
         if (decoded is Map) return _parseTimes(decoded);
-      } on FormatException {}
+      } on FormatException {
+        // النص ليس JSON صالحاً، فيُعامل كنص أوقات حر.
+      }
       return {'times': text};
     }
-    if (value is Map)
+    if (value is Map) {
       return value.map(
         (key, time) => MapEntry(key.toString(), time.toString()),
       );
+    }
     return null;
   }
 

@@ -53,9 +53,12 @@ class _SplashScreenState extends State<SplashScreen>
         .accessibilityFeatures
         .disableAnimations;
 
+    // 3.6 ثانية على كل إقلاع وقت طويل يُشعر المستخدم بأن التطبيق بطيء،
+    // خصوصاً للمستخدم اليومي الذي يراها عشرات المرات. المدة الآن تكفي
+    // للحركة الافتتاحية دون أن تتحول إلى انتظار، وزر التخطي ما زال متاحاً.
     _intro = AnimationController(
       vsync: this,
-      duration: Duration(milliseconds: reduceMotion ? 1200 : 3600),
+      duration: Duration(milliseconds: reduceMotion ? 900 : 2200),
     );
     _ambient = AnimationController(
       vsync: this,
