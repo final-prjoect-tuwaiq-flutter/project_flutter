@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:project_flutter/model/event.dart';
 import 'package:project_flutter/screens/event_details.dart';
 import 'package:project_flutter/screens/login_page.dart';
 import 'package:project_flutter/service/supabase_data.dart';
 import 'package:project_flutter/theme/theme.dart';
+import 'package:project_flutter/widgets/app_ui.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class _VisitedItem {
@@ -99,73 +101,112 @@ class _VisitedPlacesScreenState extends State<VisitedPlacesScreen> {
     }
   }
 
-  String _formatDate(DateTime date) =>
-      '${date.year}/${date.month.toString().padLeft(2, '0')}/${date.day.toString().padLeft(2, '0')}';
-
   @override
   Widget build(BuildContext context) {
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: const Color(0xFFFAF9F6),
-        body: SafeArea(
-          child: Column(
-            children: [
-              _Header(onBack: () => Navigator.maybePop(context)),
-              Expanded(
-                child: FutureBuilder<List<_VisitedItem>>(
-                  future: _visitedFuture,
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(
-                        child: CircularProgressIndicator(
-                          color: Color(0xFF17A2A2),
+    final colors = appColors(context);
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light,
+      child: Directionality(
+        textDirection: TextDirection.rtl,
+        child: Scaffold(
+          backgroundColor: colors.creamBackground,
+          body: FutureBuilder<List<_VisitedItem>>(
+            future: _visitedFuture,
+            builder: (context, snapshot) {
+              // القائمة تُبنى ككشّاف (sliver) كسول: لا تُنشأ إلا الكروت الظاهرة.
+              Widget bodySliver;
+              int? count;
+              DateTime? lastVisit;
+
+              Widget boxed(Widget child) => SliverToBoxAdapter(child: child);
+
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                bodySliver = boxed(
+                  const SizedBox(height: 520, child: AppListSkeleton()),
+                );
+              } else if (snapshot.hasError) {
+                final isUnauthenticated = snapshot.error
+                    .toString()
+                    .toLowerCase()
+                    .contains('authenticated');
+                bodySliver = boxed(
+                  isUnauthenticated
+                      ? AppStatePanel(
+                          icon: Icons.lock_outline_rounded,
+                          title: 'سجّل الدخول لعرض الأماكن التي زرتها',
+                          actionLabel: 'تسجيل الدخول',
+                          actionIcon: Icons.login_rounded,
+                          onAction: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const LoginPage(),
+                              ),
+                            );
+                          },
+                        )
+                      : AppStatePanel(
+                          icon: Icons.cloud_off_rounded,
+                          title: 'تعذر تحميل الأماكن التي زرتها',
+                          subtitle: snapshot.error.toString(),
+                          actionLabel: 'إعادة المحاولة',
+                          actionIcon: Icons.refresh_rounded,
+                          onAction: _refresh,
+                        ),
+                );
+              } else {
+                final items = snapshot.data ?? [];
+                count = items.length;
+                lastVisit = items.isEmpty ? null : items.first.visitedAt;
+                bodySliver = items.isEmpty
+                    ? boxed(
+                        const AppStatePanel(
+                          icon: Icons.explore_rounded,
+                          title: 'لم تسجّل زيارة أي مكان بعد',
+                          subtitle: 'بعد زيارتك لمكان، سجّلها من صفحة تفاصيل المكان لتظهر هنا.',
+                        ),
+                      )
+                    : SliverPadding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        sliver: SliverList.builder(
+                          itemCount: items.length,
+                          itemBuilder: (context, index) => _VisitedCard(
+                            key: ValueKey(items[index].id),
+                            item: items[index],
+                            isLast: index == items.length - 1,
+                            onDelete: () => _deleteVisit(items[index]),
+                          ),
                         ),
                       );
-                    }
+              }
 
-                    if (snapshot.hasError) {
-                      final isUnauthenticated = snapshot.error
-                          .toString()
-                          .toLowerCase()
-                          .contains('authenticated');
-                      if (isUnauthenticated) {
-                        return _SignInPrompt();
-                      }
-                      return _ErrorView(
-                        error: snapshot.error.toString(),
-                        onRetry: _refresh,
-                      );
-                    }
-
-                    final items = snapshot.data ?? [];
-                    if (items.isEmpty) {
-                      return const _EmptyVisitedView();
-                    }
-
-                    return RefreshIndicator(
-                      color: const Color(0xFF17A2A2),
-                      onRefresh: _refresh,
-                      child: ListView.builder(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-                        itemCount: items.length,
-                        itemBuilder: (context, index) {
-                          final item = items[index];
-                          return _VisitedCard(
-                            item: item,
-                            formattedDate: item.visitedAt != null
-                                ? _formatDate(item.visitedAt!)
-                                : null,
-                            onDelete: () => _deleteVisit(item),
-                          );
-                        },
+              return RefreshIndicator(
+                color: colors.accentColor,
+                onRefresh: _refresh,
+                child: CustomScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: AppPageHeader(
+                        title: 'زياراتي',
+                        icon: Icons.verified_rounded,
+                        subtitle: lastVisit != null
+                            ? 'آخر زيارة: ${formatArabicDate(lastVisit)}'
+                            : 'سجل الأماكن التي زرتها وملاحظاتك عنها',
+                        showBack: true,
+                        trailing: count == null || count == 0
+                            ? null
+                            : _CountPill(count: count),
                       ),
-                    );
-                  },
+                    ),
+                    const SliverToBoxAdapter(child: SizedBox(height: 22)),
+                    bodySliver,
+                    const SliverToBoxAdapter(child: SizedBox(height: 40)),
+                  ],
                 ),
-              ),
-            ],
+              );
+            },
           ),
         ),
       ),
@@ -173,286 +214,257 @@ class _VisitedPlacesScreenState extends State<VisitedPlacesScreen> {
   }
 }
 
-class _Header extends StatelessWidget {
-  final VoidCallback onBack;
+class _CountPill extends StatelessWidget {
+  final int count;
 
-  const _Header({required this.onBack});
+  const _CountPill({required this.count});
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: Row(
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF17A2A2),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.check_circle_rounded,
-                    color: Colors.white,
-                    size: 24,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                const Text(
-                  'الأماكن التي زرتها',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w900,
-                    color: Color(0xFF1E1E24),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            tooltip: 'رجوع',
-            onPressed: onBack,
-            icon: const Icon(
-              Icons.arrow_forward_rounded,
-              color: Color(0xFF1E1E24),
-              size: 22,
-            ),
-          ),
-        ],
+    final colors = appColors(context);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+      ),
+      child: Text(
+        arabicVisitsCount(count),
+        style: TextStyle(
+          color: colors.goldColor,
+          fontSize: 12.5,
+          fontWeight: FontWeight.w800,
+        ),
       ),
     );
   }
 }
 
+/// بطاقة زيارة على شكل خط زمني: التاريخ على الجانب والتفاصيل في البطاقة.
 class _VisitedCard extends StatelessWidget {
   final _VisitedItem item;
-  final String? formattedDate;
+  final bool isLast;
   final VoidCallback onDelete;
 
   const _VisitedCard({
+    super.key,
     required this.item,
-    required this.formattedDate,
+    required this.isLast,
     required this.onDelete,
   });
 
   @override
   Widget build(BuildContext context) {
     final event = item.event;
-    final theme = Theme.of(context);
-    final customColors = theme.extension<AppCustomColors>()!;
+    final colors = appColors(context);
+    final date = item.visitedAt;
+    final hasNotes = item.notes != null && item.notes!.trim().isNotEmpty;
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 14),
-      child: InkWell(
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => EventDetailsScreen(event: event)),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(14),
-                    child: SizedBox(
-                      width: 72,
-                      height: 72,
-                      child: Image.network(
-                        event.coverImageUrl ?? '',
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => Container(
-                          color: theme.colorScheme.surface,
-                          child: Icon(
-                            Icons.broken_image,
-                            color: theme.colorScheme.onSurface.withOpacity(0.4),
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // عمود الخط الزمني
+          SizedBox(
+            width: 54,
+            child: Column(
+              children: [
+                Container(
+                  width: 54,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    gradient: date == null ? null : colors.accentGradient,
+                    color: date == null ? colors.borderSoft : null,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        date == null ? '—' : '${date.day}',
+                        style: AppTheme.display(
+                          20,
+                          color: date == null ? colors.textMuted : Colors.white,
+                          height: 1.1,
+                        ),
+                      ),
+                      if (date != null)
+                        Text(
+                          kArabicMonths[date.month - 1],
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
+                      if (date != null)
+                        Text(
+                          '${date.year}',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.75),
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                if (!isLast)
+                  Expanded(
+                    child: Container(
+                      width: 2,
+                      margin: const EdgeInsets.symmetric(vertical: 6),
+                      decoration: BoxDecoration(
+                        color: colors.borderSoft,
+                        borderRadius: BorderRadius.circular(2),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          event.title ?? 'بدون عنوان',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleMedium,
-                        ),
-                        if (formattedDate != null) ...[
-                          const SizedBox(height: 4),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+
+          // البطاقة
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: AppSurfaceCard(
+                padding: EdgeInsets.zero,
+                radius: 22,
+                child: Material(
+                  color: Colors.transparent,
+                  borderRadius: BorderRadius.circular(22),
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => EventDetailsScreen(event: event),
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
                           Row(
                             children: [
-                              Icon(
-                                Icons.event_available_rounded,
-                                size: 14,
-                                color: customColors.accentColor,
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(16),
+                                child: SizedBox(
+                                  width: 64,
+                                  height: 64,
+                                  child: Image.network(
+                                    event.coverImageUrl ?? '',
+                                    fit: BoxFit.cover,
+                                    errorBuilder:
+                                        (
+                                          context,
+                                          error,
+                                          stackTrace,
+                                        ) => Container(
+                                          color: colors.accentColorSoft,
+                                          child: Icon(
+                                            Icons.image_not_supported_rounded,
+                                            color: colors.accentColor,
+                                          ),
+                                        ),
+                                  ),
+                                ),
                               ),
-                              const SizedBox(width: 4),
-                              Text(
-                                'تمت الزيارة في $formattedDate',
-                                style: theme.textTheme.bodySmall,
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      event.title ?? 'بدون عنوان',
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: AppTheme.display(
+                                        15.5,
+                                        color: colors.textPrimary,
+                                        height: 1.35,
+                                      ),
+                                    ),
+                                    if (date != null) ...[
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        'زرته في ${formatArabicDate(date)}',
+                                        style: TextStyle(
+                                          color: colors.textMuted,
+                                          fontSize: 11.5,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'حذف الزيارة',
+                                onPressed: onDelete,
+                                icon: Icon(
+                                  Icons.delete_outline_rounded,
+                                  color: colors.textMuted,
+                                  size: 21,
+                                ),
                               ),
                             ],
                           ),
+                          if (hasNotes) ...[
+                            const SizedBox(height: 10),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.fromLTRB(
+                                12,
+                                10,
+                                12,
+                                10,
+                              ),
+                              decoration: BoxDecoration(
+                                color: colors.accentColorDeep.withValues(
+                                  alpha: 0.08,
+                                ),
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(
+                                    Icons.format_quote_rounded,
+                                    size: 16,
+                                    color: colors.accentColorDeep,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      item.notes!,
+                                      style: TextStyle(
+                                        color: colors.textPrimary.withValues(
+                                          alpha: 0.85,
+                                        ),
+                                        fontSize: 13,
+                                        height: 1.7,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ],
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'حذف الزيارة',
-                    onPressed: onDelete,
-                    icon: const Icon(
-                      Icons.delete_outline_rounded,
-                      color: Colors.grey,
-                    ),
-                  ),
-                ],
-              ),
-              if (item.notes != null && item.notes!.trim().isNotEmpty) ...[
-                const SizedBox(height: 10),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF3F4F6),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    item.notes!,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: const Color(0xFF1D1D1D),
+                      ),
                     ),
                   ),
                 ),
-              ],
-            ],
+              ),
+            ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _EmptyVisitedView extends StatelessWidget {
-  const _EmptyVisitedView();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.explore_off_rounded, size: 72, color: Colors.grey[400]),
-            const SizedBox(height: 16),
-            const Text(
-              'لم تسجّل زيارة أي مكان بعد',
-              style: TextStyle(
-                color: Color(0xFF1E1E24),
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'بعد زيارتك لمكان، سجّلها من صفحة تفاصيل المكان لتظهر هنا',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey[600], fontSize: 14),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SignInPrompt extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.lock_outline_rounded, size: 64, color: Colors.grey[400]),
-            const SizedBox(height: 16),
-            const Text(
-              'سجّل الدخول لعرض الأماكن التي زرتها',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 20),
-            FilledButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const LoginPage()),
-                );
-              },
-              style: FilledButton.styleFrom(
-                backgroundColor: AppTheme.baseBlack,
-              ),
-              child: const Text('تسجيل الدخول'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ErrorView extends StatelessWidget {
-  final String error;
-  final Future<void> Function() onRetry;
-
-  const _ErrorView({required this.error, required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.cloud_off_rounded, size: 64, color: Colors.grey[400]),
-            const SizedBox(height: 16),
-            const Text(
-              'تعذر تحميل الأماكن التي زرتها',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              error,
-              textAlign: TextAlign.center,
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: Colors.grey[600]),
-            ),
-            const SizedBox(height: 20),
-            FilledButton.icon(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('إعادة المحاولة'),
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF1E1E24),
-                foregroundColor: Colors.white,
-              ),
-            ),
-          ],
-        ),
+        ],
       ),
     );
   }

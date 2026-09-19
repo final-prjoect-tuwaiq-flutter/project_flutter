@@ -22,12 +22,14 @@ dependencies:
   dash_chat_2: ^0.0.21
   google_generative_ai: ^0.4.7
   flutter_dotenv: ^6.0.1
+  shared_preferences: ^2.5.5
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
 
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
 
 flutter:
 
@@ -35,6 +37,44 @@ flutter:
 
   assets:
     - .env
+    - assets/images/
 
+  fonts:
+    # خط الواجهة العام — ثمانية سانس
+    - family: ThmanyahSans
+      fonts:
+        - asset: assets/fonts/thmanyahsans-Light.otf
+          weight: 300
+        - asset: assets/fonts/thmanyahsans-Regular.otf
+          weight: 400
+        - asset: assets/fonts/thmanyahsans-Medium.otf
+          weight: 500
+        - asset: assets/fonts/thmanyahsans-Bold.otf
+          weight: 700
+        - asset: assets/fonts/thmanyahsans-Black.otf
+          weight: 900
 
+    # خط العناوين الفاخر — ثمانية سيرف ديسبلاي
+    - family: ThmanyahSerifDisplay
+      fonts:
+        - asset: assets/fonts/thmanyahserifdisplay-Light.otf
+          weight: 300
+        - asset: assets/fonts/thmanyahserifdisplay-Regular.otf
+          weight: 400
+        - asset: assets/fonts/thmanyahserifdisplay-Medium.otf
+          weight: 500
+        - asset: assets/fonts/thmanyahserifdisplay-Bold.otf
+          weight: 700
+        - asset: assets/fonts/thmanyahserifdisplay-Black.otf
+          weight: 900
 
+# أيقونة التطبيق مولّدة من شعار "المعزب" الرسمي.
+flutter_launcher_icons:
+  image_path: assets/images/app_logo.png
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  web:
+    generate: true
+  adaptive_icon_background: "#FAF3E5"
+  adaptive_icon_foreground: assets/images/app_logo.png

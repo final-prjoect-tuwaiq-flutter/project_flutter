@@ -7,40 +7,50 @@ import 'package:project_flutter/theme/theme.dart';
 class ChatFabButton extends StatelessWidget {
   final double bottomOffset;
 
-  const ChatFabButton({super.key, this.bottomOffset = 100});
+  const ChatFabButton({super.key, this.bottomOffset = 118});
 
   @override
   Widget build(BuildContext context) {
-    final customColors = Theme.of(context).extension<AppCustomColors>()!;
+    final colors = Theme.of(context).extension<AppCustomColors>()!;
 
     return Positioned(
       bottom: bottomOffset,
-      right: 16,
-      child: GestureDetector(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const ChatScreen()),
-          );
-        },
-        child: Container(
-          width: 58,
-          height: 58,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: customColors.accentColor,
-            boxShadow: [
-              BoxShadow(
-                color: customColors.accentColor.withOpacity(0.4),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
+      right: 18,
+      child: Tooltip(
+        message: 'مرشد المعزب',
+        child: GestureDetector(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ChatScreen()),
+            );
+          },
+          child: Container(
+            width: 58,
+            height: 58,
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: colors.accentGradient,
+              boxShadow: [
+                BoxShadow(
+                  color: colors.accentColor.withValues(alpha: 0.45),
+                  blurRadius: 18,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: colors.inkColor,
               ),
-            ],
-          ),
-          child: const Icon(
-            Icons.smart_toy_rounded,
-            color: Colors.white,
-            size: 28,
+              child: Icon(
+                Icons.auto_awesome_rounded,
+                color: colors.goldColor,
+                size: 25,
+              ),
+            ),
           ),
         ),
       ),

@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:project_flutter/screens/categories_screen.dart';
 import 'package:project_flutter/screens/login_page.dart';
 import 'package:project_flutter/service/supabase_data.dart';
-import 'package:project_flutter/theme/theme.dart';
+import 'package:project_flutter/widgets/app_ui.dart';
+import 'package:project_flutter/widgets/auth_layout.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 // ==========================================
@@ -27,11 +28,13 @@ class SignUpController {
   }
 
   String? validateEmail(String? value) {
-    if (value == null || value.trim().isEmpty)
+    if (value == null || value.trim().isEmpty) {
       return 'الرجاء إدخال البريد الإلكتروني';
+    }
     final emailRegex = RegExp(r'^[^@]+@[^@]+\.[^@]+');
-    if (!emailRegex.hasMatch(value.trim()))
+    if (!emailRegex.hasMatch(value.trim())) {
       return 'صيغة البريد الإلكتروني غير صحيحة';
+    }
     return null;
   }
 
@@ -102,189 +105,135 @@ class _SignUpPageState extends State<SignUpPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final colors = appColors(context);
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: theme.colorScheme.surface,
-        appBar: AppBar(leading: const SizedBox.shrink()),
-        body: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0),
-            child: Form(
-              key: _controller.formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // الشعار والنص الترحيبي
-                  Center(
-                    child: Column(
-                      children: [
-                        Text(
-                          'أنشئ حسابك في المعزب',
-                          style: theme.textTheme.titleLarge?.copyWith(
-                            fontSize: 26,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'سجل الآن وابدأ تجربتك الممتعة!',
-                          style: theme.textTheme.bodyMedium,
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 40),
-
-                  // حقل الإيميل
-                  Text('البريد الإلكتروني', style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: _controller.emailController,
-                    validator: _controller.validateEmail,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(
-                      hintText: 'أدخل بريدك الإلكتروني',
-                      prefixIcon: Icon(Icons.email_outlined),
-                    ),
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  // حقل كلمة المرور
-                  Text('كلمة المرور', style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: _controller.passwordController,
-                    validator: _controller.validatePassword,
-                    obscureText: !_controller.isPasswordVisible,
-                    decoration: InputDecoration(
-                      hintText: 'أدخل كلمة المرور (6 أحرف على الأقل)',
-                      prefixIcon: const Icon(Icons.lock_outline_rounded),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _controller.isPasswordVisible
-                              ? Icons.visibility
-                              : Icons.visibility_off,
-                          color: theme.colorScheme.onSurface.withOpacity(0.5),
-                        ),
-                        onPressed: () => setState(
-                          () => _controller.isPasswordVisible =
-                              !_controller.isPasswordVisible,
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  // حقل تأكيد كلمة المرور
-                  Text('تأكيد كلمة المرور', style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: _controller.confirmPasswordController,
-                    validator: _controller.validateConfirmPassword,
-                    obscureText: !_controller.isConfirmPasswordVisible,
-                    decoration: InputDecoration(
-                      hintText: 'أعد إدخال كلمة المرور',
-                      prefixIcon: const Icon(Icons.lock_reset_rounded),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _controller.isConfirmPasswordVisible
-                              ? Icons.visibility
-                              : Icons.visibility_off,
-                          color: theme.colorScheme.onSurface.withOpacity(0.5),
-                        ),
-                        onPressed: () => setState(
-                          () => _controller.isConfirmPasswordVisible =
-                              !_controller.isConfirmPasswordVisible,
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 32),
-
-                  // زر إنشاء الحساب
-                  SizedBox(
-                    width: double.infinity,
-                    height: 56,
-                    child: ElevatedButton(
-                      style: AppTheme.blackCtaButtonStyle,
-                      onPressed: _controller.isLoading
-                          ? null
-                          : () async {
-                              bool success = await _controller.signUp(
-                                context,
-                                () => setState(() {}),
-                              );
-                              if (success && context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('تم إنشاء الحساب بنجاح!'),
-                                  ),
-                                );
-                                Navigator.pushReplacement(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => const CategoriesScreen(),
-                                  ),
-                                );
-                              }
-                            },
-                      child: _controller.isLoading
-                          ? CircularProgressIndicator(
-                              color: theme.colorScheme.onPrimary,
-                            )
-                          : Text(
-                              'إنشاء الحساب',
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                color: Colors.white,
-                              ),
-                            ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 32),
-
-                  // رابط تسجيل الدخول
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        'لديك حساب بالفعل؟',
-                        style: theme.textTheme.bodyMedium,
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const LoginPage(),
-                            ),
-                          );
-                        },
-                        child: Text(
-                          'سجل دخول الآن',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.primary,
-                            fontWeight: FontWeight.bold,
-                            decoration: TextDecoration.underline,
-                            decorationColor: theme.colorScheme.primary,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                ],
+    return AuthLayout(
+      title: 'أنشئ حسابك في المعزب',
+      subtitle: 'سجل الآن وابدأ تجربتك الممتعة!',
+      child: Form(
+        key: _controller.formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // حقل الإيميل
+            const AuthFieldLabel('البريد الإلكتروني'),
+            TextFormField(
+              controller: _controller.emailController,
+              validator: _controller.validateEmail,
+              keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.next,
+              decoration: const InputDecoration(
+                hintText: 'name@example.com',
+                prefixIcon: Icon(Icons.alternate_email_rounded),
               ),
             ),
-          ),
+
+            const SizedBox(height: 18),
+
+            // حقل كلمة المرور
+            const AuthFieldLabel('كلمة المرور'),
+            TextFormField(
+              controller: _controller.passwordController,
+              validator: _controller.validatePassword,
+              obscureText: !_controller.isPasswordVisible,
+              textInputAction: TextInputAction.next,
+              decoration: InputDecoration(
+                hintText: '6 أحرف على الأقل',
+                prefixIcon: const Icon(Icons.lock_outline_rounded),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _controller.isPasswordVisible
+                        ? Icons.visibility_rounded
+                        : Icons.visibility_off_rounded,
+                  ),
+                  onPressed: () => setState(
+                    () => _controller.isPasswordVisible =
+                        !_controller.isPasswordVisible,
+                  ),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 18),
+
+            // حقل تأكيد كلمة المرور
+            const AuthFieldLabel('تأكيد كلمة المرور'),
+            TextFormField(
+              controller: _controller.confirmPasswordController,
+              validator: _controller.validateConfirmPassword,
+              obscureText: !_controller.isConfirmPasswordVisible,
+              decoration: InputDecoration(
+                hintText: 'أعد إدخال كلمة المرور',
+                prefixIcon: const Icon(Icons.lock_reset_rounded),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _controller.isConfirmPasswordVisible
+                        ? Icons.visibility_rounded
+                        : Icons.visibility_off_rounded,
+                  ),
+                  onPressed: () => setState(
+                    () => _controller.isConfirmPasswordVisible =
+                        !_controller.isConfirmPasswordVisible,
+                  ),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 28),
+
+            // زر إنشاء الحساب
+            AppGradientButton(
+              label: 'إنشاء الحساب',
+              icon: Icons.person_add_alt_1_rounded,
+              isLoading: _controller.isLoading,
+              onPressed: _controller.isLoading
+                  ? null
+                  : () async {
+                      bool success = await _controller.signUp(
+                        context,
+                        () => setState(() {}),
+                      );
+                      if (success && context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('تم إنشاء الحساب بنجاح!'),
+                          ),
+                        );
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const CategoriesScreen(),
+                          ),
+                        );
+                      }
+                    },
+            ),
+
+            const SizedBox(height: 24),
+
+            // رابط تسجيل الدخول
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  'لديك حساب بالفعل؟',
+                  style: TextStyle(
+                    color: colors.textMuted,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                TextButton(
+                  onPressed: () {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (_) => const LoginPage()),
+                    );
+                  },
+                  child: const Text('سجل دخولك'),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );

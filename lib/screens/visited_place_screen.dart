@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:project_flutter/model/event.dart';
 import 'package:project_flutter/screens/login_page.dart';
 import 'package:project_flutter/service/supabase_data.dart';
+import 'package:project_flutter/theme/theme.dart';
+import 'package:project_flutter/widgets/app_ui.dart';
 
 class VisitedPlaceScreen extends StatefulWidget {
   final Event event;
@@ -61,41 +63,24 @@ class _VisitedPlaceScreenState extends State<VisitedPlaceScreen> {
         ..clearSnackBars()
         ..showSnackBar(
           SnackBar(
-            content: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    isUnauthenticated
-                        ? 'يجب تسجيل الدخول لحفظ الزيارة'
-                        : 'تعذر حفظ الزيارة: $error',
-                    maxLines: 2,
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                ),
-                if (isUnauthenticated)
-                  TextButton(
+            content: Text(
+              isUnauthenticated
+                  ? 'يجب تسجيل الدخول لحفظ الزيارة'
+                  : 'تعذر حفظ الزيارة: $error',
+              maxLines: 2,
+            ),
+            duration: const Duration(seconds: 3),
+            action: isUnauthenticated
+                ? SnackBarAction(
+                    label: 'تسجيل الدخول',
                     onPressed: () {
                       Navigator.push(
                         context,
                         MaterialPageRoute(builder: (_) => const LoginPage()),
                       );
                     },
-                    style: TextButton.styleFrom(
-                      foregroundColor: Colors.amberAccent,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    child: const Text(
-                      'تسجيل الدخول الآن',
-                      style: TextStyle(fontSize: 13),
-                    ),
-                  ),
-              ],
-            ),
-            duration: const Duration(seconds: 3),
-            behavior: SnackBarBehavior.floating,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  )
+                : null,
           ),
         );
       Future<void>.delayed(const Duration(seconds: 3), () {
@@ -108,10 +93,17 @@ class _VisitedPlaceScreenState extends State<VisitedPlaceScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
+    final colors = appColors(context);
+    final yesterday = DateTime.now().subtract(const Duration(days: 1));
+    final isCustomDate =
+        !_isSameDay(_visitedAt, DateTime.now()) &&
+        !_isSameDay(_visitedAt, yesterday);
+
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        clipBehavior: Clip.antiAlias,
         child: Form(
           key: _formKey,
           child: SingleChildScrollView(
@@ -119,70 +111,120 @@ class _VisitedPlaceScreenState extends State<VisitedPlaceScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  'تسجيل زيارة ${widget.event.title ?? ''}',
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 18),
-                TextFormField(
-                  controller: _notesController,
-                  maxLines: 4,
-                  decoration: const InputDecoration(
-                    labelText: 'ملاحظاتك',
-                    hintText: 'اكتب ملاحظاتك عن المكان',
-                    alignLabelWithHint: true,
-                  ),
-                  validator: (value) => value == null || value.trim().isEmpty
-                      ? 'أدخل ملاحظة واحدة على الأقل'
-                      : null,
-                ),
-                const SizedBox(height: 16),
-                const Align(
-                  alignment: Alignment.centerRight,
-                  child: Text(
-                    'تاريخ الزيارة',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  children: [
-                    ChoiceChip(
-                      label: const Text('اليوم'),
-                      selected: _isSameDay(_visitedAt, DateTime.now()),
-                      onSelected: (_) => _setDate(DateTime.now()),
-                    ),
-                    ChoiceChip(
-                      label: const Text('أمس'),
-                      selected: _isSameDay(
-                        _visitedAt,
-                        DateTime.now().subtract(const Duration(days: 1)),
+                // ترويسة الحوار
+                Container(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 14, 20),
+                  decoration: BoxDecoration(gradient: colors.inkGradient),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 46,
+                        height: 46,
+                        margin: const EdgeInsets.only(top: 4),
+                        decoration: BoxDecoration(
+                          gradient: colors.accentGradient,
+                          borderRadius: BorderRadius.circular(15),
+                        ),
+                        child: const Icon(
+                          Icons.verified_rounded,
+                          color: Colors.white,
+                        ),
                       ),
-                      onSelected: (_) => _setDate(
-                        DateTime.now().subtract(const Duration(days: 1)),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'تسجيل زيارة',
+                                style: AppTheme.display(
+                                  20,
+                                  color: Colors.white,
+                                  height: 1.3,
+                                ),
+                              ),
+                              Text(
+                                widget.event.title ?? '',
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: colors.goldColor,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: _pickDate,
-                      icon: const Icon(Icons.calendar_month_rounded),
-                      label: Text(_formatDate(_visitedAt)),
-                    ),
-                  ],
+                      AppCircleButton(
+                        icon: Icons.close_rounded,
+                        tooltip: 'إغلاق',
+                        size: 36,
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 22),
-                FilledButton(
-                  onPressed: _isSaving ? null : _save,
-                  child: _isSaving
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('حفظ الزيارة'),
+
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _FormLabel(text: 'ملاحظاتك'),
+                      TextFormField(
+                        controller: _notesController,
+                        maxLines: 4,
+                        decoration: const InputDecoration(
+                          hintText: 'ما الذي أعجبك؟ نصائح لمن سيزوره بعدك',
+                        ),
+                        validator: (value) =>
+                            value == null || value.trim().isEmpty
+                            ? 'أدخل ملاحظة واحدة على الأقل'
+                            : null,
+                      ),
+                      const SizedBox(height: 18),
+                      _FormLabel(text: 'تاريخ الزيارة'),
+                      Row(
+                        children: [
+                          _DateOption(
+                            label: 'اليوم',
+                            selected: _isSameDay(_visitedAt, DateTime.now()),
+                            onTap: () => _setDate(DateTime.now()),
+                          ),
+                          const SizedBox(width: 8),
+                          _DateOption(
+                            label: 'أمس',
+                            selected: _isSameDay(_visitedAt, yesterday),
+                            onTap: () => _setDate(yesterday),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _DateOption(
+                              label: isCustomDate
+                                  ? formatArabicDate(_visitedAt)
+                                  : 'تاريخ آخر',
+                              icon: Icons.calendar_month_rounded,
+                              selected: isCustomDate,
+                              onTap: _pickDate,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+                      AppGradientButton(
+                        label: 'حفظ الزيارة',
+                        icon: Icons.check_rounded,
+                        isLoading: _isSaving,
+                        onPressed: _isSaving ? null : _save,
+                        height: 52,
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -196,7 +238,86 @@ class _VisitedPlaceScreenState extends State<VisitedPlaceScreen> {
       first.year == second.year &&
       first.month == second.month &&
       first.day == second.day;
+}
 
-  String _formatDate(DateTime date) =>
-      '${date.year}/${date.month.toString().padLeft(2, '0')}/${date.day.toString().padLeft(2, '0')}';
+class _FormLabel extends StatelessWidget {
+  final String text;
+
+  const _FormLabel({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8, right: 4),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: appColors(context).textPrimary,
+          fontSize: 13.5,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+class _DateOption extends StatelessWidget {
+  final String label;
+  final IconData? icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _DateOption({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = appColors(context);
+
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+        decoration: BoxDecoration(
+          color: selected ? colors.accentColorSoft : colors.surfaceColor,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: selected ? colors.accentColor : colors.borderSoft,
+            width: selected ? 1.4 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (icon != null) ...[
+              Icon(
+                icon,
+                size: 16,
+                color: selected ? colors.accentColor : colors.textMuted,
+              ),
+              const SizedBox(width: 6),
+            ],
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: selected ? colors.accentColor : colors.textPrimary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
