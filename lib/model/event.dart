@@ -23,9 +23,6 @@ class Event {
   final String? coverImageUrl;
   final String? thumbnailUrl;
 
-  final String? startAt;
-  final String? endAt;
-
   final bool? isFree;
   final double? priceMin;
   final double? priceMax;
@@ -125,15 +122,14 @@ class Event {
     return timeStr;
   }
 
+  /// سطر واحد مختصر لأوقات العمل يصلح لبطاقة القائمة، ولا يُعرض إلا حين
+  /// تتساوى أوقات كل الأيام (`{"times": "..."}`)، فالجدول المفصّل يحتاج
+  /// أسطراً متعددة تظهر في صفحة التفاصيل.
   String? get formattedTimesArabic {
-    if (startAt != null && endAt != null) {
-      return 'من ${_formatTime(startAt!)} إلى ${_formatTime(endAt!)}';
-    } else if (startAt != null) {
-      return 'يبدأ من ${_formatTime(startAt!)}';
-    } else if (endAt != null) {
-      return 'ينتهي في ${_formatTime(endAt!)}';
-    }
-    return null;
+    if (times == null || times!.length != 1) return null;
+    final value = times!['times']?.toString().trim();
+    if (value == null || value.isEmpty) return null;
+    return _formatScheduleValue(value);
   }
 
   // --- دالة ترجمة الأيام من الإنجليزية للعربية ---
@@ -325,8 +321,6 @@ class Event {
     this.fullDescription,
     this.coverImageUrl,
     this.thumbnailUrl,
-    this.startAt,
-    this.endAt,
     this.isFree,
     this.priceMin,
     this.priceMax,
@@ -353,8 +347,6 @@ class Event {
       fullDescription: json['full_description'] as String?,
       coverImageUrl: json['cover_image_url'] as String?,
       thumbnailUrl: json['thumbnail_url'] as String?,
-      startAt: json['start_at']?.toString(),
-      endAt: json['end_at']?.toString(),
       isFree: json['is_free'] as bool?,
       priceMin: json['price_min'] != null
           ? (json['price_min'] as num).toDouble()
@@ -449,8 +441,6 @@ class Event {
       'full_description': fullDescription,
       'cover_image_url': coverImageUrl,
       'thumbnail_url': thumbnailUrl,
-      'start_at': startAt,
-      'end_at': endAt,
       'is_free': isFree,
       'price_min': priceMin,
       'price_max': priceMax,

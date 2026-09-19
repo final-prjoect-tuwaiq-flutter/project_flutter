@@ -1,3 +1,5 @@
+import 'dart:math' show Random;
+
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:project_flutter/model/category_model.dart';
 import 'package:project_flutter/model/event.dart';
@@ -267,8 +269,6 @@ class SupabaseData {
     Map<String, dynamic>? times,
     DateTime? fromDate,
     DateTime? toDate,
-    String? startAt,
-    String? endAt,
   }) async {
     final userId = _currentUserId;
     if (userId == null) throw Exception('No authenticated user found.');
@@ -301,18 +301,55 @@ class SupabaseData {
       // تاريخ فقط بلا وقت، فالعمودان يمثّلان فترة إتاحة لا لحظة زمنية.
       'from_date': dateOnly(fromDate),
       'to_date': dateOnly(toDate),
-      'start_at': clean(startAt),
-      'end_at': clean(endAt),
       'created_by': userId,
     };
 
-    final response = await supabase
-        .from('events3')
-        .insert(placeData)
-        .select()
-        .single();
+    // العمود `id` في events3 بلا توليد تلقائي، فالتطبيق هو من يختار الرقم.
+    // نبدأ من أكبر رقم موجود + 1 ليبقى الترقيم مرتباً، ومع كل تصادم نعيد
+    // المحاولة برقم عشوائي لأن شريكاً آخر قد يكون سبقنا للرقم نفسه.
+    var candidate = await _nextPlaceId();
+    for (var attempt = 0; ; attempt++) {
+      try {
+        final response = await supabase
+            .from('events3')
+            .insert({...placeData, 'id': candidate})
+            .select()
+            .single();
+        return Map<String, dynamic>.from(response);
+      } on PostgrestException catch (error) {
+        // 23505 = unique_violation، أي أن الرقم حُجز بيننا وبين القراءة.
+        if (error.code != '23505' || attempt >= _placeIdMaxAttempts - 1) {
+          rethrow;
+        }
+        candidate = _randomPlaceId();
+      }
+    }
+  }
 
-    return Map<String, dynamic>.from(response);
+  /// أقصى عدد محاولات لإيجاد رقم غير مستخدم قبل الاستسلام.
+  static const _placeIdMaxAttempts = 5;
+  static const _placeIdMin = 1100;
+  static const _placeIdMax = 19999;
+  static final _placeIdRandom = Random();
+
+  static int _randomPlaceId() =>
+      _placeIdMin + _placeIdRandom.nextInt(_placeIdMax - _placeIdMin + 1);
+
+  /// أكبر رقم مستخدم + 1، أو رقم عشوائي إن تجاوز الترقيم الحد الأعلى
+  /// أو منعت سياسات RLS قراءة الصفوف الأخرى.
+  Future<int> _nextPlaceId() async {
+    final row = await supabase
+        .from('events3')
+        .select('id')
+        .order('id', ascending: false)
+        .limit(1)
+        .maybeSingle();
+
+    final highest = (row?['id'] as num?)?.toInt();
+    if (highest == null) return _placeIdMin;
+    final next = highest + 1;
+    if (next < _placeIdMin || next > _placeIdMax) return _randomPlaceId();
+    return next;
   }
 
   Future<Map<String, dynamic>> addVisitedPlace({
