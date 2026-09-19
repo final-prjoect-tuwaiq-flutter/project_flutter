@@ -1,5 +1,20 @@
 import 'dart:convert';
 
+/// حالة إتاحة المكان كما تُعرض للزائر.
+enum PlaceAvailability {
+  /// مفتوح ضمن فترة إتاحته.
+  open,
+
+  /// أغلقه صاحبه (`is_open = false`).
+  closed,
+
+  /// لم تبدأ فترة إتاحته بعد (`from_date` في المستقبل).
+  notStarted,
+
+  /// انتهت فترة إتاحته (`to_date` في الماضي).
+  ended,
+}
+
 class Event {
   final int id;
   final String? title;
@@ -26,6 +41,81 @@ class Event {
   // الحقول الجديدة لأيام الإغلاق والأوقات
   final List<dynamic>? closedDays;
   final Map<dynamic, dynamic>? times;
+
+  /// هل المكان مفتوح؟ `false` تعني أن صاحبه أغلقه، و null تعني أن الحالة
+  /// غير مسجّلة فنعامله كمفتوح.
+  final bool? isOpen;
+
+  /// فترة إتاحة المكان (اختيارية): من تاريخ وإلى تاريخ.
+  final DateTime? fromDate;
+  final DateTime? toDate;
+
+  /// الحالة المعروضة للزائر: الإغلاق اليدوي أولاً، ثم فترة الإتاحة.
+  PlaceAvailability get availability {
+    if (isOpen == false) return PlaceAvailability.closed;
+
+    final today = DateTime.now();
+    final startOfToday = DateTime(today.year, today.month, today.day);
+    if (toDate != null && startOfToday.isAfter(_dateOnly(toDate!))) {
+      return PlaceAvailability.ended;
+    }
+    if (fromDate != null && startOfToday.isBefore(_dateOnly(fromDate!))) {
+      return PlaceAvailability.notStarted;
+    }
+    return PlaceAvailability.open;
+  }
+
+  /// هل يجب تنبيه الزائر إلى أن المكان غير متاح الآن؟
+  bool get isUnavailable => availability != PlaceAvailability.open;
+
+  /// كلمة مختصرة تُعرض على البطاقة وفي صفحة التفاصيل، أو null إن كان متاحاً.
+  String? get availabilityLabel => switch (availability) {
+    PlaceAvailability.open => null,
+    PlaceAvailability.closed => 'مغلق',
+    PlaceAvailability.notStarted => 'لم يفتح بعد',
+    PlaceAvailability.ended => 'انتهى',
+  };
+
+  /// جملة توضّح سبب عدم الإتاحة، أو null إن كان المكان متاحاً.
+  String? get availabilityNote => switch (availability) {
+    PlaceAvailability.open => null,
+    PlaceAvailability.closed => 'المكان مغلق حالياً.',
+    PlaceAvailability.notStarted =>
+      'يفتح المكان في ${_formatDateArabic(fromDate!)}.',
+    PlaceAvailability.ended =>
+      'انتهت فترة إتاحة المكان في ${_formatDateArabic(toDate!)}.',
+  };
+
+  /// فترة الإتاحة بالعربية، أو null إن لم تُسجَّل تواريخ.
+  String? get formattedDateRangeArabic {
+    if (fromDate == null && toDate == null) return null;
+    if (fromDate != null && toDate != null) {
+      return 'من ${_formatDateArabic(fromDate!)} إلى ${_formatDateArabic(toDate!)}';
+    }
+    if (fromDate != null) return 'يبدأ ${_formatDateArabic(fromDate!)}';
+    return 'ينتهي ${_formatDateArabic(toDate!)}';
+  }
+
+  static DateTime _dateOnly(DateTime date) =>
+      DateTime(date.year, date.month, date.day);
+
+  static const List<String> _arabicMonths = [
+    'يناير',
+    'فبراير',
+    'مارس',
+    'أبريل',
+    'مايو',
+    'يونيو',
+    'يوليو',
+    'أغسطس',
+    'سبتمبر',
+    'أكتوبر',
+    'نوفمبر',
+    'ديسمبر',
+  ];
+
+  static String _formatDateArabic(DateTime date) =>
+      '${date.day} ${_arabicMonths[date.month - 1]} ${date.year}';
 
   String? get latLng => lat != null && lng != null ? '$lat,$lng' : null;
 
@@ -250,6 +340,9 @@ class Event {
     this.url,
     this.closedDays,
     this.times,
+    this.isOpen,
+    this.fromDate,
+    this.toDate,
   });
 
   factory Event.fromJson(Map<dynamic, dynamic> json) {
@@ -283,7 +376,28 @@ class Event {
       // التعديل هنا لقراءة البيانات بشكل صحيح من Supabase
       closedDays: _parseClosedDays(json['closed_days']),
       times: _parseTimes(json['times']),
+      isOpen: _parseBool(json['is_open']),
+      fromDate: _parseDate(json['from_date']),
+      toDate: _parseDate(json['to_date']),
     );
+  }
+
+  /// العمود قد يعود منطقياً أو نصاً (`"true"`/`"false"`) حسب نوعه في القاعدة.
+  static bool? _parseBool(dynamic value) {
+    if (value == null) return null;
+    if (value is bool) return value;
+    final text = value.toString().trim().toLowerCase();
+    if (text == 'true' || text == 't' || text == '1') return true;
+    if (text == 'false' || text == 'f' || text == '0') return false;
+    return null;
+  }
+
+  static DateTime? _parseDate(dynamic value) {
+    if (value == null) return null;
+    if (value is DateTime) return value;
+    final text = value.toString().trim();
+    if (text.isEmpty) return null;
+    return DateTime.tryParse(text);
   }
 
   static String? _mapsUrl(dynamic lat, dynamic lng) {
@@ -349,6 +463,9 @@ class Event {
       'm_category': mCategory,
       'closed_days': closedDays,
       'times': times,
+      'is_open': isOpen,
+      'from_date': fromDate?.toIso8601String(),
+      'to_date': toDate?.toIso8601String(),
     };
   }
 }

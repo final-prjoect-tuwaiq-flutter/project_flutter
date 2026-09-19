@@ -84,4 +84,68 @@ void main() {
       expect(event.formattedClosedDaysArabic, 'لا توجد أيام إغلاق');
     });
   });
+
+  group('حالة الإتاحة', () {
+    String iso(DateTime date) =>
+        '${date.year.toString().padLeft(4, '0')}-'
+        '${date.month.toString().padLeft(2, '0')}-'
+        '${date.day.toString().padLeft(2, '0')}';
+
+    final today = DateTime.now();
+
+    test('بلا بيانات يُعتبر المكان مفتوحاً', () {
+      final event = _event({});
+
+      expect(event.availability, PlaceAvailability.open);
+      expect(event.isUnavailable, isFalse);
+      expect(event.availabilityLabel, isNull);
+    });
+
+    test('is_open = false يجعله مغلقاً', () {
+      final event = _event({'is_open': false});
+
+      expect(event.availability, PlaceAvailability.closed);
+      expect(event.availabilityLabel, 'مغلق');
+      expect(event.availabilityNote, isNotNull);
+    });
+
+    test('العمود النصي "false" يُقرأ إغلاقاً كذلك', () {
+      expect(_event({'is_open': 'false'}).isUnavailable, isTrue);
+      expect(_event({'is_open': 'true'}).isUnavailable, isFalse);
+    });
+
+    test('تاريخ نهاية مضى يعني انتهاء الفترة', () {
+      final event = _event({
+        'to_date': iso(today.subtract(const Duration(days: 1))),
+      });
+
+      expect(event.availability, PlaceAvailability.ended);
+      expect(event.availabilityLabel, 'انتهى');
+    });
+
+    test('تاريخ بداية قادم يعني أنه لم يفتح بعد', () {
+      final event = _event({
+        'from_date': iso(today.add(const Duration(days: 3))),
+      });
+
+      expect(event.availability, PlaceAvailability.notStarted);
+      expect(event.availabilityLabel, 'لم يفتح بعد');
+    });
+
+    test('اليوم داخل الفترة يبقى مفتوحاً', () {
+      final event = _event({
+        'from_date': iso(today.subtract(const Duration(days: 2))),
+        'to_date': iso(today.add(const Duration(days: 2))),
+      });
+
+      expect(event.availability, PlaceAvailability.open);
+      expect(event.formattedDateRangeArabic, startsWith('من '));
+    });
+
+    test('آخر يوم في الفترة لا يُعدّ منتهياً', () {
+      final event = _event({'to_date': iso(today)});
+
+      expect(event.availability, PlaceAvailability.open);
+    });
+  });
 }

@@ -956,6 +956,7 @@ class EventCard extends StatelessWidget {
     final theme = Theme.of(context);
     final colors = theme.extension<AppCustomColors>()!;
     final workingHours = event.formattedTimesArabic;
+    final footerText = event.availabilityNote ?? workingHours;
 
     void openDetails() {
       Navigator.push(
@@ -1005,6 +1006,22 @@ class EventCard extends StatelessWidget {
                       ),
                     ),
                   ),
+
+                  // المكان المغلق (أو خارج فترة إتاحته) يُعتَّم غلافه حتى
+                  // لا يبدو كبقية الأماكن المتاحة.
+                  if (event.isUnavailable)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(27),
+                            ),
+                            color: colors.inkColor.withValues(alpha: 0.45),
+                          ),
+                        ),
+                      ),
+                    ),
 
                   // تدرّج داكن أسفل الصورة ليبرز الشارات فوقها
                   Positioned.fill(
@@ -1116,6 +1133,13 @@ class EventCard extends StatelessWidget {
                           spacing: 8,
                           runSpacing: 8,
                           children: [
+                            if (event.availabilityLabel != null)
+                              _FrostedPill(
+                                icon: Icons.do_not_disturb_on_rounded,
+                                label: event.availabilityLabel!,
+                                background: AppTheme.errorColor,
+                                foreground: Colors.white,
+                              ),
                             if (distanceText != null)
                               _FrostedPill(
                                 icon: Icons.near_me_rounded,
@@ -1173,25 +1197,33 @@ class EventCard extends StatelessWidget {
                     Row(
                       children: [
                         Expanded(
-                          child: workingHours == null
+                          // حالة الإغلاق أهم من أوقات العمل، فتأخذ مكانها.
+                          child: footerText == null
                               ? const SizedBox.shrink()
                               : Row(
                                   children: [
                                     Icon(
-                                      Icons.schedule_rounded,
+                                      event.isUnavailable
+                                          ? Icons.do_not_disturb_on_rounded
+                                          : Icons.schedule_rounded,
                                       size: 15,
-                                      color: colors.accentColor,
+                                      color: event.isUnavailable
+                                          ? AppTheme.errorColor
+                                          : colors.accentColor,
                                     ),
                                     const SizedBox(width: 6),
                                     Expanded(
                                       child: Text(
-                                        workingHours,
+                                        footerText,
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: theme.textTheme.bodySmall
                                             ?.copyWith(
                                               fontSize: 11.5,
                                               fontWeight: FontWeight.w600,
+                                              color: event.isUnavailable
+                                                  ? AppTheme.errorColor
+                                                  : null,
                                             ),
                                       ),
                                     ),

@@ -128,6 +128,7 @@ class GeminiChatService {
 - عند التوصية بمكان، اذكر اسمه، لماذا يناسبه (السعر/الفئة/القرب من اهتماماته)، وأوقات العمل إن وُجدت.
 - يمكنك اقتراح أكثر من مكان مع ترتيبها حسب الأنسب للمستخدم.
 - إن لم توجد أي أماكن مطابقة لطلب المستخدم، أخبره بذلك بصراحة واقترح أقرب بديل متاح.
+- لا ترشّح مكاناً قيمة `is_open` فيه false إلا إذا سأل المستخدم عنه بالاسم، وحينها نبّهه أنه مغلق حالياً واذكر `availability_note`.
 
 قائمة الأماكن المتوفرة حالياً في التطبيق (JSON):
 ${jsonEncode(placesJson)}
@@ -157,6 +158,10 @@ ${favoritesJson.isEmpty ? 'لا توجد أماكن مفضلة بعد.' : jsonEn
       'price_max': place.priceMax,
       'working_hours': place.formattedWorkingHoursArabic,
       'closed_days': place.formattedClosedDaysArabic,
+      // بلا هذه الحقول كان المساعد يرشّح أماكن مغلقة أو انتهت فترتها.
+      'is_open': place.availability == PlaceAvailability.open,
+      'availability_note': place.availabilityNote,
+      'available_period': place.formattedDateRangeArabic,
     };
   }
 }
