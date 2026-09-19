@@ -13,12 +13,33 @@ class AppBottomNavBar extends StatelessWidget {
     required this.onTap,
   });
 
+  /// المسافة الثابتة بين الشريط وحافة الشاشة، فوق أي حشوة نظام.
+  static const double _bottomGap = 22;
+
+  /// ارتفاع الشريط تقريباً مع هامشه، لوضع العناصر العائمة فوقه.
+  /// Scaffold لا يحشو `bottomNavigationBar` تلقائياً، فنقرأ حشوة النظام هنا.
+  static double heightWithInsets(BuildContext context) =>
+      76 + _bottomGap + MediaQuery.viewPaddingOf(context).bottom;
+
+  /// الحشوة السفلية التي تحتاجها القوائم حتى لا يختفي آخر عنصر خلف الشريط.
+  /// كانت أرقاماً ثابتة (130/140) لا تعرف شيئاً عن حشوة النظام.
+  static double contentBottomPadding(BuildContext context) =>
+      heightWithInsets(context) + 44;
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppCustomColors>()!;
 
+    // على أجهزة الإيماءات يقع شريط الإيماءة أسفل الشاشة؛ بلا هذه الحشوة
+    // كان الشريط يلامسه فتتداخل لمسات التنقل مع إيماءة النظام.
+    final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
+
     return Container(
-      margin: const EdgeInsets.only(left: 30, right: 30, bottom: 22),
+      margin: EdgeInsets.only(
+        left: 30,
+        right: 30,
+        bottom: _bottomGap + bottomInset,
+      ),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(34),
         boxShadow: [

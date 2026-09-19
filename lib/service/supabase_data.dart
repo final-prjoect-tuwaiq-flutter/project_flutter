@@ -61,7 +61,7 @@ class SupabaseData {
     }
   }
 
-  dynamic get _currentUserId => supabase.auth.currentUser?.id;
+  String? get _currentUserId => supabase.auth.currentUser?.id;
 
   Future<void> addFavorite(int placeId) async {
     final userId = _currentUserId;
@@ -147,8 +147,19 @@ class SupabaseData {
     return push(visitedData: data);
   }
 
+  /// يحذف سجل زيارة يخصّ المستخدم الحالي.
+  ///
+  /// الترشيح بـ user_id دفاع ثانٍ إلى جانب سياسات RLS: الحذف بالمعرّف وحده
+  /// كان يعتمد كلياً على وجود السياسة على الخادم.
   Future<void> delete({required dynamic id, String idColumn = 'id'}) async {
-    await supabase.from('user_visited').delete().eq(idColumn, id);
+    final userId = _currentUserId;
+    if (userId == null) throw Exception('No authenticated user found.');
+
+    await supabase
+        .from('user_visited')
+        .delete()
+        .eq(idColumn, id)
+        .eq('user_id', userId);
   }
 
   Future<Map<String, dynamic>> pushRequest({

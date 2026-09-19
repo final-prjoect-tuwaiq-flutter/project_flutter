@@ -116,6 +116,90 @@ class AppHeroImage extends StatelessWidget {
 }
 
 // ==========================================
+// صورة مكان: مصدر واحد لتحميل صور الأماكن في التطبيق كله
+// ==========================================
+
+/// تعرض صورة المكان من الشبكة مع بديل محلي عند غياب الرابط أو فشل التحميل.
+///
+/// كانت الشاشات سابقاً تستعمل روابط `via.placeholder.com` كبديل، وهي خدمة
+/// خارجية متوقفة، فكان "البديل" نفسه يفشل ويظهر للمستخدم فراغاً.
+/// البديل الآن مرسوم محلياً فلا يحتاج شبكة أصلاً.
+///
+/// [decodeWidth] يحدّ من أبعاد فك الترميز في الذاكرة: صورة غلاف بعرض 2000px
+/// تشغل نحو 16 ميغابايت في ذاكرة الصور، وتقليصها لعرض العنصر الفعلي يخفضها
+/// عشرات الأضعاف — وهو الفرق بين تمرير سلس وتقطيع في القوائم الطويلة.
+class AppPlaceImage extends StatelessWidget {
+  final String? url;
+  final BoxFit fit;
+  final double? decodeWidth;
+
+  /// حجم أيقونة البديل، يُصغَّر في الصور المصغّرة.
+  final double fallbackIconSize;
+
+  const AppPlaceImage({
+    super.key,
+    required this.url,
+    this.fit = BoxFit.cover,
+    this.decodeWidth,
+    this.fallbackIconSize = 38,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final trimmed = url?.trim();
+    if (trimmed == null || trimmed.isEmpty) return _fallback(context);
+
+    final ratio = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1.0;
+    final cacheWidth = decodeWidth == null
+        ? null
+        : (decodeWidth! * ratio).round();
+
+    return Image.network(
+      trimmed,
+      fit: fit,
+      cacheWidth: cacheWidth,
+      // الصورة تظهر بتلاشٍ لطيف بدل أن تقفز فجأة داخل الكرت.
+      frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+        if (wasSynchronouslyLoaded) return child;
+        return AnimatedOpacity(
+          opacity: frame == null ? 0 : 1,
+          duration: const Duration(milliseconds: 260),
+          curve: Curves.easeOut,
+          child: child,
+        );
+      },
+      loadingBuilder: (context, child, progress) =>
+          progress == null ? child : _placeholderSurface(context),
+      errorBuilder: (context, error, stackTrace) => _fallback(context),
+    );
+  }
+
+  Widget _placeholderSurface(BuildContext context) {
+    final colors = appColors(context);
+    return AppPulse(
+      child: ColoredBox(
+        color: colors.textPrimary.withValues(alpha: 0.06),
+        child: const SizedBox.expand(),
+      ),
+    );
+  }
+
+  Widget _fallback(BuildContext context) {
+    final colors = appColors(context);
+    return ColoredBox(
+      color: colors.textPrimary.withValues(alpha: 0.06),
+      child: Center(
+        child: Icon(
+          Icons.image_not_supported_rounded,
+          color: colors.textPrimary.withValues(alpha: 0.25),
+          size: fallbackIconSize,
+        ),
+      ),
+    );
+  }
+}
+
+// ==========================================
 // هالة ضوئية ناعمة للخلفيات الليلية
 // ==========================================
 class AppGlowBlob extends StatelessWidget {

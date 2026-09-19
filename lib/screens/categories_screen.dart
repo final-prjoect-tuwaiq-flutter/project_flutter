@@ -1,6 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:flutter/services.dart';
 import 'package:project_flutter/screens/event_details.dart';
 import 'package:project_flutter/theme/theme.dart';
 import 'package:project_flutter/widgets/app_bottom_nav_bar.dart';
@@ -13,19 +14,19 @@ import 'package:project_flutter/screens/login_page.dart';
 import 'package:project_flutter/service/favorites_controller.dart';
 import 'package:project_flutter/service/location.dart'; // استيراد ملف الموقع
 import 'package:project_flutter/service/metro_controller.dart';
-import 'package:project_flutter/screens/account.dart';
-import 'package:project_flutter/screens/add_place_screen.dart';
 import 'package:project_flutter/widgets/chat_fab_button.dart';
 
 class CategoriesScreen extends StatefulWidget {
-  const CategoriesScreen({super.key});
+  /// يُبلّغ الشِّل بفتح تصنيف أو إغلاقه، ليقرّر وجهة زر رجوع الجهاز.
+  final ValueChanged<bool>? onCategoryOpenChanged;
+
+  const CategoriesScreen({super.key, this.onCategoryOpenChanged});
 
   @override
-  State<CategoriesScreen> createState() => _CategoriesScreenState();
+  State<CategoriesScreen> createState() => CategoriesScreenState();
 }
 
-class _CategoriesScreenState extends State<CategoriesScreen> {
-  int _currentIndex = 0;
+class CategoriesScreenState extends State<CategoriesScreen> {
   int? _selectedCategoryId;
   String? _selectedCategoryName;
 
@@ -34,6 +35,9 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
   // ==========================================
   bool _isSortingByNearest = false; // هل تم تفعيل الترتيب؟
   bool _isLoadingLocation = false; // هل يجري تحديد الموقع الآن؟
+  bool _isSortInFlight = false; // حارس منع تداخل طلبات الترتيب
+  bool _hasPendingSort = false; // طلب ترتيب وصل أثناء طلب جارٍ
+  bool _pendingSortReuseLastPosition = false;
   Map<int, double> _distancesCache = {}; // خزن المسافات لتجنب إعادة الحساب
   Position? _lastPosition; // آخر موقع معروف، لإعادة الترتيب دون قراءة GPS جديدة
   int _sortRequestId = 0;
@@ -42,13 +46,16 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
 
   late final Future<List<Category>> _categoriesFuture;
   Future<List<Event>>? _eventsFuture;
-  List<Event>? _loadedEvents;
 
   @override
   void initState() {
     super.initState();
     _categoriesFuture = _fetchCategories();
     _eventsFuture = _fetchAllEvents();
+    // صفحة "الكل" لا تعرض شيئاً قبل اكتمال الترتيب حسب الأقرب، والترتيب
+    // يبدأ بعد أول إطار؛ نرفع المؤشر من الآن حتى لا تومض القائمة غير
+    // مرتّبة في الإطارات الأولى.
+    _isLoadingLocation = true;
     FavoritesController.instance.ensureLoaded();
     MetroController.instance.ensureLoaded();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -110,10 +117,20 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
   // دالة تفعيل الترتيب حسب الأقرب
   // ==========================================
   Future<void> _sortByNearest({bool reuseLastPosition = false}) async {
-    // منع الاستدعاء المتكرر أثناء التحميل
-    if (_isLoadingLocation) return;
+    // منع الاستدعاء المتكرر أثناء التحميل.
+    // الحارس منفصل عن _isLoadingLocation لأن الأخير قد يكون مرفوعاً مسبقاً
+    // من initState قبل أن ينطلق أول ترتيب فعلي.
+    if (_isSortInFlight) {
+      // إهمال الطلب هنا كان يترك صفحة "الكل" بلا ترتيب بعد أن رفعت
+      // مؤشر الانتظار، فنؤجّله بدل أن نسقطه.
+      _pendingSortReuseLastPosition = reuseLastPosition;
+      _hasPendingSort = true;
+      return;
+    }
+    _isSortInFlight = true;
 
     final requestId = ++_sortRequestId;
+    final pendingEvents = _eventsFuture;
     setState(() => _isLoadingLocation = true);
 
     try {
@@ -124,10 +141,13 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
           await determinePosition();
       _lastPosition = position;
 
-      // 2. جلب الأماكن مباشرة بدل الاعتماد على FutureBuilder
-      final events = _selectedCategoryId == null
-          ? await _fetchAllEvents()
-          : await _fetchEvents(_selectedCategoryId!);
+      // 2. ننتظر نفس طلب الشاشة بدل إطلاق طلب ثانٍ للجدول كاملاً؛
+      // كان الإقلاع يحمّل قائمة الأماكن مرتين على الشبكة.
+      final events =
+          await pendingEvents ??
+          (_selectedCategoryId == null
+              ? await _fetchAllEvents()
+              : await _fetchEvents(_selectedCategoryId!));
 
       if (!mounted || requestId != _sortRequestId) return;
 
@@ -186,6 +206,14 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
           ),
         );
       }
+    } finally {
+      _isSortInFlight = false;
+      if (_hasPendingSort && mounted) {
+        _hasPendingSort = false;
+        unawaited(
+          _sortByNearest(reuseLastPosition: _pendingSortReuseLastPosition),
+        );
+      }
     }
   }
 
@@ -223,6 +251,46 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
       formatDistanceMeters(distanceInKm * 1000);
 
   // ==========================================
+  // السحب للتحديث: يعيد جلب التصنيف الحالي ويحدّث المسافات إن كان
+  // الترتيب حسب الأقرب مفعّلاً.
+  // ==========================================
+  Future<void> _refreshEvents() async {
+    final future = _selectedCategoryId == null
+        ? _fetchAllEvents()
+        : _fetchEvents(_selectedCategoryId!);
+
+    setState(() {
+      _eventsFuture = future;
+    });
+
+    try {
+      final events = await future;
+      if (!mounted) return;
+
+      // إعادة استخدام آخر موقع معروف: التحديث لا يفتح الـ GPS من جديد.
+      final position = _lastPosition;
+      if (_isSortingByNearest && position != null) {
+        final refreshed = <int, double>{};
+        for (final event in events) {
+          if (event.lat != null && event.lng != null) {
+            refreshed[event.id] =
+                distance(
+                  position.latitude,
+                  position.longitude,
+                  event.lat!,
+                  event.lng!,
+                ) /
+                1000;
+          }
+        }
+        if (mounted) setState(() => _distancesCache = refreshed);
+      }
+    } catch (_) {
+      // الخطأ يظهر للمستخدم عبر FutureBuilder في القائمة نفسها.
+    }
+  }
+
+  // ==========================================
   // إعادة ضبط حالة الترتيب عند تغيير التصنيف
   // ==========================================
   void _resetSortState() {
@@ -244,11 +312,13 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
       _eventsFuture = category == null
           ? _fetchAllEvents()
           : _fetchEvents(category.id);
-      _loadedEvents = null;
       _sortRequestId++;
-      _isLoadingLocation = false;
+      // "الكل" تنتظر الترتيب، وبقية التصنيفات تعرض أماكنها فور وصولها.
+      _isLoadingLocation = shouldResort;
       _resetSortState();
     });
+
+    widget.onCategoryOpenChanged?.call(category != null);
 
     if (shouldResort) _sortByNearest(reuseLastPosition: true);
   }
@@ -257,65 +327,41 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppCustomColors>()!;
 
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light,
-      child: Directionality(
-        textDirection: TextDirection.rtl,
-        // زر الرجوع في الجهاز يُعيد المستخدم للصفحة الرئيسية بدل الخروج
-        // من التطبيق ما دام هناك تصنيف مفتوح.
-        child: PopScope(
-          canPop: _selectedCategoryId == null,
-          onPopInvokedWithResult: (didPop, _) {
-            if (!didPop && _selectedCategoryId != null) _selectCategory(null);
-          },
-          child: Scaffold(
-            backgroundColor: colors.creamBackground,
-            extendBody: true,
-            body: Stack(
-              children: [
-                CustomScrollView(
-                  physics: const BouncingScrollPhysics(
-                    parent: AlwaysScrollableScrollPhysics(),
-                  ),
-                  slivers: [
-                    // 1. الواجهة الليلية العلوية (الهوية + التصنيفات)
-                    SliverToBoxAdapter(child: _buildHero(colors)),
-
-                    // 2. عنوان القسم + زر الترتيب حسب الأقرب
-                    SliverToBoxAdapter(child: _buildSectionHeader(colors)),
-
-                    // 3. قسم الأماكن
-                    _buildEventsSliver(colors),
-                  ],
-                ),
-                const ChatFabButton(bottomOffset: 118),
-              ],
+    // الشاشة تعيش داخل [HomeShell]: الشِّل يملك الـ Scaffold وشريط التنقل
+    // ومعالجة زر الرجوع، وهذه تُعيد محتواها فقط.
+    return Stack(
+      children: [
+        // السحب للتحديث: لم تكن هناك أي طريقة لإعادة جلب الأماكن
+        // بعد فشل الشبكة سوى إغلاق التطبيق وفتحه من جديد.
+        RefreshIndicator(
+          color: colors.accentColor,
+          backgroundColor: colors.surfaceColor,
+          onRefresh: _refreshEvents,
+          child: CustomScrollView(
+            physics: const BouncingScrollPhysics(
+              parent: AlwaysScrollableScrollPhysics(),
             ),
+            slivers: [
+              // 1. الواجهة الليلية العلوية (الهوية + التصنيفات)
+              SliverToBoxAdapter(child: _buildHero(colors)),
 
-            // 4. البوتوم ناف بار العائم
-            bottomNavigationBar: FloatingBottomNavBar(
-              currentIndex: _currentIndex,
-              onTap: (index) {
-                if (index == 0) {
-                  setState(() => _currentIndex = 0);
-                  _selectCategory(null);
-                } else if (index == 1) {
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(builder: (_) => const AddPlaceScreen()),
-                  );
-                } else if (index == 2) {
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(builder: (_) => const AccountScreen()),
-                  );
-                }
-              },
-            ),
+              // 2. عنوان القسم + زر الترتيب حسب الأقرب
+              SliverToBoxAdapter(child: _buildSectionHeader(colors)),
+
+              // 3. قسم الأماكن
+              _buildEventsSliver(colors),
+            ],
           ),
         ),
-      ),
+        const ChatFabButton(),
+      ],
     );
+  }
+
+  /// يعيد الصفحة إلى "الكل". يستدعيها الشِّل من زر الرجوع ومن النقر على
+  /// تبويب الرئيسية وهو مفتوح.
+  void resetToAll() {
+    if (_selectedCategoryId != null) _selectCategory(null);
   }
 
   // ==========================================
@@ -605,13 +651,19 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
   // ==========================================
   Widget _buildEventsSliver(AppCustomColors colors) {
     return FutureBuilder<List<Event>>(
+      // المفتاح مربوط بهوية الطلب: FutureBuilder يحتفظ ببيانات الطلب السابق
+      // عند تبديل future (يغيّر connectionState فقط)، فكانت أماكن التصنيف
+      // السابق تبقى معروضة أثناء تحميل الجديد. تغيّر المفتاح يبني حالة
+      // جديدة فارغة، فلا يظهر شيء قبل وصول أماكن التصنيف المطلوب.
+      key: ValueKey<Future<List<Event>>?>(_eventsFuture),
       future: _eventsFuture,
       builder: (context, snapshot) {
-        if (_isLoadingLocation) {
-          return const _EventsSkeletonSliver();
-        }
+        // صفحة "الكل" مرتّبة حسب الأقرب دائماً، فلا تُعرض قبل اكتمال
+        // الترتيب حتى لا يرى المستخدم قائمة يتبدّل ترتيبها تحت يده.
+        final waitsForSort = _selectedCategoryId == null && _isLoadingLocation;
 
-        if (snapshot.connectionState == ConnectionState.waiting) {
+        if (waitsForSort ||
+            snapshot.connectionState == ConnectionState.waiting) {
           return const _EventsSkeletonSliver();
         }
 
@@ -625,8 +677,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
           );
         }
 
-        if (snapshot.hasData) _loadedEvents = snapshot.data!;
-        final rawEvents = snapshot.data ?? _loadedEvents ?? [];
+        final rawEvents = snapshot.data ?? const <Event>[];
 
         if (rawEvents.isEmpty) {
           return const SliverToBoxAdapter(
@@ -644,7 +695,9 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
         // قائمة كسولة: لا يُبنى إلا ما يظهر على الشاشة، والمفاتيح تحافظ على
         // حالة الكروت عند إعادة الترتيب.
         return SliverPadding(
-          padding: const EdgeInsets.only(bottom: 140),
+          padding: EdgeInsets.only(
+            bottom: AppBottomNavBar.contentBottomPadding(context),
+          ),
           sliver: SliverList(
             delegate: SliverChildBuilderDelegate(
               (context, index) {
@@ -904,7 +957,7 @@ class EventCard extends StatelessWidget {
     final colors = theme.extension<AppCustomColors>()!;
     final workingHours = event.formattedTimesArabic;
 
-    void _navigateToDetails() {
+    void openDetails() {
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -916,7 +969,7 @@ class EventCard extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: _navigateToDetails,
+        onTap: openDetails,
         borderRadius: BorderRadius.circular(28),
         child: Container(
           margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 9),
@@ -945,18 +998,10 @@ class EventCard extends StatelessWidget {
                     ),
                     child: AspectRatio(
                       aspectRatio: 16 / 10,
-                      child: Image.network(
-                        event.coverImageUrl ??
-                            'https://via.placeholder.com/400x250',
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => Container(
-                          color: colors.textPrimary.withValues(alpha: 0.06),
-                          child: Icon(
-                            Icons.image_not_supported_rounded,
-                            color: colors.textPrimary.withValues(alpha: 0.25),
-                            size: 38,
-                          ),
-                        ),
+                      child: AppPlaceImage(
+                        url: event.coverImageUrl,
+                        // الكرت بعرض الشاشة تقريباً، فلا داعي لفك ترميز أكبر.
+                        decodeWidth: MediaQuery.sizeOf(context).width,
                       ),
                     ),
                   ),
@@ -1391,15 +1436,4 @@ class _MessagePanel extends StatelessWidget {
       ),
     );
   }
-}
-
-// ==========================================
-// البوتوم ناف بار العائم (نفس الشريط الموحّد للتطبيق)
-// ==========================================
-class FloatingBottomNavBar extends AppBottomNavBar {
-  const FloatingBottomNavBar({
-    super.key,
-    required super.currentIndex,
-    required super.onTap,
-  });
 }
