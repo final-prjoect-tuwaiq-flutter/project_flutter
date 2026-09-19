@@ -128,7 +128,46 @@ class AppHeroImage extends StatelessWidget {
 /// [decodeWidth] يحدّ من أبعاد فك الترميز في الذاكرة: صورة غلاف بعرض 2000px
 /// تشغل نحو 16 ميغابايت في ذاكرة الصور، وتقليصها لعرض العنصر الفعلي يخفضها
 /// عشرات الأضعاف — وهو الفرق بين تمرير سلس وتقطيع في القوائم الطويلة.
-class AppPlaceImage extends StatelessWidget {
+/// مضيفات نثق بأنها تخدم صورها بترويسات CORS صحيحة وسلسلة شهادات كاملة،
+/// فلا حاجة لتمريرها عبر وسيط.
+const Set<String> _directImageHostSuffixes = {'supabase.co', 'supabase.in'};
+
+/// يعيد صياغة رابط صورة خارجي ليمر عبر وسيط الصور، أو `null` إن كان الرابط
+/// غير صالح للوساطة (محلي، أو `data:`، أو مضيف موثوق أصلاً).
+///
+/// سبب وجود هذه الدالة أن كثيراً من المواقع العربية الإخبارية تخدم صورها
+/// بإعدادات ناقصة، وهي تكسر التطبيق بطريقتين مختلفتين حسب المنصة:
+///
+///  1. **الويب** — لا ترسل ترويسة `Access-Control-Allow-Origin` إطلاقاً،
+///     فيمنع المتصفح قراءة الصورة مهما فعلنا في كود Dart.
+///  2. **أندرويد** — ترسل شهادة الخادم وحدها بلا الشهادة الوسيطة، وتعتمد
+///     على أن يجلبها العميل عبر AIA. المتصفحات وويندوز تفعل ذلك، أما
+///     BoringSSL داخل Dart فلا، فتفشل المصافحة قبل وصول أي بايت.
+///
+/// الوسيط يحل الاثنتين: ينهي TLS عنده بسلسلة كاملة، ويخدم النتيجة بـ
+/// `Access-Control-Allow-Origin: *`. وبالمجان يعيد التحجيم إلى العرض
+/// المطلوب — صورة غلاف 94 كيلوبايت تنزل إلى نحو 3 عند عرض 800 بكسل.
+String? _proxiedUrl(String url, int? width) {
+  final uri = Uri.tryParse(url);
+  if (uri == null || !uri.hasScheme || !uri.isScheme('https')) return null;
+  final host = uri.host.toLowerCase();
+  if (host.isEmpty) return null;
+  if (_directImageHostSuffixes.any(
+    (suffix) => host == suffix || host.endsWith('.$suffix'),
+  )) {
+    return null;
+  }
+
+  return Uri.https('wsrv.nl', '/', {
+    'url': url,
+    if (width != null) 'w': '$width',
+    // لا نكبّر صورة أصغر من المطلوب، فالتكبير يضيف بايتات بلا تفاصيل.
+    'we': '1',
+    'output': 'webp',
+  }).toString();
+}
+
+class AppPlaceImage extends StatefulWidget {
   final String? url;
   final BoxFit fit;
   final double? decodeWidth;
@@ -145,18 +184,37 @@ class AppPlaceImage extends StatelessWidget {
   });
 
   @override
+  State<AppPlaceImage> createState() => _AppPlaceImageState();
+}
+
+class _AppPlaceImageState extends State<AppPlaceImage> {
+  /// يصبح `true` متى فشل الوسيط، فنعيد المحاولة على الرابط الأصلي مباشرة.
+  bool _proxyFailed = false;
+
+  @override
+  void didUpdateWidget(AppPlaceImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // القوائم تعيد استعمال عناصرها، فلولا هذا لورث رابطٌ جديد فشلَ سابقه.
+    if (oldWidget.url != widget.url) _proxyFailed = false;
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final trimmed = url?.trim();
+    final trimmed = widget.url?.trim();
     if (trimmed == null || trimmed.isEmpty) return _fallback(context);
 
     final ratio = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1.0;
-    final cacheWidth = decodeWidth == null
+    final cacheWidth = widget.decodeWidth == null
         ? null
-        : (decodeWidth! * ratio).round();
+        : (widget.decodeWidth! * ratio).round();
+
+    final source = _proxyFailed
+        ? trimmed
+        : _proxiedUrl(trimmed, cacheWidth) ?? trimmed;
 
     return Image.network(
-      trimmed,
-      fit: fit,
+      source,
+      fit: widget.fit,
       cacheWidth: cacheWidth,
       // الصورة تظهر بتلاشٍ لطيف بدل أن تقفز فجأة داخل الكرت.
       frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
@@ -170,7 +228,17 @@ class AppPlaceImage extends StatelessWidget {
       },
       loadingBuilder: (context, child, progress) =>
           progress == null ? child : _placeholderSurface(context),
-      errorBuilder: (context, error, stackTrace) => _fallback(context),
+      errorBuilder: (context, error, stackTrace) {
+        // سقط الوسيط؟ نجرّب المصدر الأصلي مرة واحدة قبل إظهار البديل، فلا
+        // يحجب عطلٌ في خدمة خارجية صوراً كانت ستُحمَّل مباشرةً بلا مشكلة.
+        if (!_proxyFailed && source != trimmed) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) setState(() => _proxyFailed = true);
+          });
+          return _placeholderSurface(context);
+        }
+        return _fallback(context);
+      },
     );
   }
 
@@ -192,7 +260,7 @@ class AppPlaceImage extends StatelessWidget {
         child: Icon(
           Icons.image_not_supported_rounded,
           color: colors.textPrimary.withValues(alpha: 0.25),
-          size: fallbackIconSize,
+          size: widget.fallbackIconSize,
         ),
       ),
     );

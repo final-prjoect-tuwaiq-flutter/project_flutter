@@ -6,10 +6,10 @@
 *.swp
 .buildlog/
 .history
+/tools
 
 # Secrets
 .env
-
 
 
 # Flutter repo-specific
