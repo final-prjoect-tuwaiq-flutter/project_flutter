@@ -1,0 +1,15 @@
+android/
+ios/
+macos/
+linux/
+windows/
+build/
+.dart_tool/
+.pub-cache/
+_flutter_sdk/
+.git/
+*.iml
+.idea/
+
+# لا يُرفع إطلاقاً: نسخة الويب لا تحمل أسراراً
+.env

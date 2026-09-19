@@ -1,7 +1,12 @@
 import 'dart:convert';
 
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:google_generative_ai/google_generative_ai.dart';
+// createModelWithBaseUri هي الواجهة الرسمية التي تتيح توجيه الحزمة إلى خادم
+// آخر (تستعملها حزمة Vertex AI نفسها)، وهي غير مُصدَّرة من الواجهة العامة.
+// ignore: implementation_imports
+import 'package:google_generative_ai/src/vertex_hooks.dart'
+    show createModelWithBaseUri;
 import 'package:project_flutter/model/category_model.dart';
 import 'package:project_flutter/model/event.dart';
 import 'package:project_flutter/service/supabase_data.dart';
@@ -11,16 +16,19 @@ class GeminiChatService {
 
   static final GeminiChatService instance = GeminiChatService._internal();
 
-  /// اسم النموذج قابل للضبط من `.env` حتى لا يحتاج تغييره إلى إصدار جديد
-  /// من التطبيق عند تحديث أسماء نماذج Gemini.
-  static const _fallbackModelName = 'gemini-2.5-flash';
+  /// اسم النموذج قابل للضبط وقت البناء عبر
+  /// `--dart-define=GEMINI_MODEL=...` عند تحديث أسماء نماذج Gemini.
+  static const _modelName = String.fromEnvironment(
+    'GEMINI_MODEL',
+    defaultValue: 'gemini-3.6-flash',
+  );
 
-  String get _modelName {
-    final configured = dotenv.env['GEMINI_MODEL']?.trim();
-    return configured == null || configured.isEmpty
-        ? _fallbackModelName
-        : configured;
-  }
+  /// أصل الوسيط للمنصات الأصلية. ليس سرّاً — هو عنوان عام — ويُضبط وقت
+  /// البناء عبر `--dart-define=GEMINI_PROXY_ORIGIN=...` عند تغيّر النطاق.
+  static const _proxyOrigin = String.fromEnvironment(
+    'GEMINI_PROXY_ORIGIN',
+    defaultValue: 'https://project-flutter-bice.vercel.app',
+  );
 
   final SupabaseData _data = SupabaseData();
 
@@ -46,25 +54,29 @@ class GeminiChatService {
   }
 
   Future<void> startNewSession() async {
-    final apiKey = dotenv.env['GEMINI_API_KEY'];
-    if (apiKey == null || apiKey.trim().isEmpty) {
-      throw Exception(
-        'لم يتم ضبط مفتاح Gemini API. أضف GEMINI_API_KEY في ملف .env',
-      );
-    }
-
     final systemPrompt = await _buildSystemPrompt();
+    _chatSession = _model(systemPrompt).startChat();
+    _sessionUserId = _data.supabase.auth.currentUser?.id;
+    _isReady = true;
+  }
 
-    final model = GenerativeModel(
+  /// المفتاح لا يُشحن إلى أي مستخدم على أي منصة: كل ما يُبنى في التطبيق —
+  /// أصولاً كان أو شيفرة — قابل للاستخراج، في APK كما في build/web. لذلك
+  /// تُوجَّه الحزمة إلى `/api/gemini`، وهي دالة خادم على Vercel تضيف
+  /// المفتاح الحقيقي من متغيّرات البيئة.
+  ///
+  /// على الويب يُؤخذ الأصل من الصفحة نفسها، فيعمل على أي نطاق أو معاينة
+  /// دون إعادة بناء؛ وعلى المنصات الأصلية لا صفحة، فيُستعمل `_proxyOrigin`.
+  GenerativeModel _model(String systemPrompt) {
+    final origin = kIsWeb ? Uri.base.origin : _proxyOrigin;
+
+    return createModelWithBaseUri(
       model: _modelName,
-      apiKey: apiKey,
+      apiKey: '',
+      baseUri: Uri.parse('$origin/api/gemini'),
       systemInstruction: Content.system(systemPrompt),
       generationConfig: GenerationConfig(temperature: 0.6),
     );
-
-    _chatSession = model.startChat();
-    _sessionUserId = _data.supabase.auth.currentUser?.id;
-    _isReady = true;
   }
 
   Future<String> sendMessage(String text) async {

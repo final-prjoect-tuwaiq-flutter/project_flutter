@@ -1,0 +1,6 @@
+{
+  "private": true,
+  "name": "project-flutter-web",
+  "description": "دوال الخادم المرافقة لنسخة الويب — لا علاقة لها ببناء Flutter نفسه.",
+  "engines": { "node": ">=20" }
+}

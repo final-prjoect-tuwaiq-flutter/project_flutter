@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:project_flutter/app_locale.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:project_flutter/screens/home_shell.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:project_flutter/screens/splash_screen.dart';
@@ -11,15 +10,6 @@ import 'package:project_flutter/theme/theme_controller.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // تحميل متغيرات البيئة (مفتاح Gemini API وغيره).
-  // غياب الملف كان يُسقط التطبيق قبل أن يظهر أي شيء؛ الآن يعمل التطبيق
-  // كاملاً عدا المرشد الذكي، وهو يعرض رسالته الخاصة عند غياب المفتاح.
-  try {
-    await dotenv.load(fileName: '.env');
-  } catch (error) {
-    debugPrint('تعذر تحميل ملف .env: $error');
-  }
 
   // تهيئة Supabase (تأكد من وضع روابط مشروعك هنا)
   await Supabase.initialize(
