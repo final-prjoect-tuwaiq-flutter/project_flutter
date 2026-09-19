@@ -44,12 +44,25 @@ class AddPlaceScreenState extends State<AddPlaceScreen> {
   final _shortDescriptionController = TextEditingController();
   final _fullDescriptionController = TextEditingController();
   final _coverImageController = TextEditingController();
+  final _thumbnailController = TextEditingController();
   final _priceController = TextEditingController();
 
   Future<List<Category>>? _categoriesFuture;
   int? _selectedCategoryId;
   bool _isFree = true;
   bool _isSaving = false;
+
+  /// أوقات العمل اليومية. تُحفظ في عمود `times` بصيغة `{'times': 'HH:mm-HH:mm'}`
+  /// وهي الصيغة التي تقرأها [Event.formattedWorkingHoursArabic].
+  TimeOfDay? _openingTime;
+  TimeOfDay? _closingTime;
+
+  /// فترة إتاحة المكان (اختيارية): تُحفظ في `from_date` و`to_date`.
+  DateTime? _fromDate;
+  DateTime? _toDate;
+
+  /// هل يحتاج الزائر لحجز مسبق؟ إن كان كذلك فرابط الحجز إجباري.
+  bool _requiresBooking = false;
 
   /// النشر المباشر متاح للشريك المعتمد فقط، وإلا فالمسار هو الاقتراح للمراجعة.
   bool get _canPublishDirectly => _partner.canPublishDirectly;
@@ -70,6 +83,7 @@ class AddPlaceScreenState extends State<AddPlaceScreen> {
     _shortDescriptionController.dispose();
     _fullDescriptionController.dispose();
     _coverImageController.dispose();
+    _thumbnailController.dispose();
     _priceController.dispose();
     super.dispose();
   }
@@ -84,10 +98,35 @@ class AddPlaceScreenState extends State<AddPlaceScreen> {
     });
   }
 
+  /// أوقات العمل بصيغة عمود `times`، أو null إن لم يحدّدها الشريك.
+  Map<String, dynamic>? get _timesPayload {
+    final opening = _openingTime;
+    final closing = _closingTime;
+    if (opening == null || closing == null) return null;
+    return {'times': '${_formatTime(opening)}-${_formatTime(closing)}'};
+  }
+
+  static String _formatTime(TimeOfDay time) =>
+      '${time.hour.toString().padLeft(2, '0')}:'
+      '${time.minute.toString().padLeft(2, '0')}';
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     if (_canPublishDirectly && _selectedCategoryId == null) {
       _showSnackBar('اختر تصنيف المكان');
+      return;
+    }
+    // وقت واحد بلا الآخر لا يصنع فترة عمل، فلا يُحفظ بصمت.
+    if (_canPublishDirectly &&
+        (_openingTime == null) != (_closingTime == null)) {
+      _showSnackBar('حدّد وقت الفتح ووقت الإغلاق معاً');
+      return;
+    }
+    if (_canPublishDirectly &&
+        _fromDate != null &&
+        _toDate != null &&
+        _toDate!.isBefore(_fromDate!)) {
+      _showSnackBar('تاريخ النهاية يجب أن يكون بعد تاريخ البداية');
       return;
     }
 
@@ -101,6 +140,7 @@ class AddPlaceScreenState extends State<AddPlaceScreen> {
           shortDescription: _shortDescriptionController.text,
           fullDescription: _fullDescriptionController.text,
           coverImageUrl: _coverImageController.text,
+          thumbnailUrl: _thumbnailController.text,
           lat: coordinates?.lat,
           lng: coordinates?.lng,
           isFree: _isFree,
@@ -108,6 +148,10 @@ class AddPlaceScreenState extends State<AddPlaceScreen> {
               ? null
               : double.tryParse(_priceController.text.trim()),
           ticketUrl: _websiteController.text,
+          requiresBooking: _requiresBooking,
+          times: _timesPayload,
+          fromDate: _fromDate,
+          toDate: _toDate,
         );
       } else {
         await SupabaseData().pushPlaceRequest(
@@ -164,10 +208,16 @@ class AddPlaceScreenState extends State<AddPlaceScreen> {
     _shortDescriptionController.clear();
     _fullDescriptionController.clear();
     _coverImageController.clear();
+    _thumbnailController.clear();
     _priceController.clear();
     setState(() {
       _selectedCategoryId = null;
       _isFree = true;
+      _openingTime = null;
+      _closingTime = null;
+      _fromDate = null;
+      _toDate = null;
+      _requiresBooking = false;
     });
   }
 
@@ -184,8 +234,13 @@ class AddPlaceScreenState extends State<AddPlaceScreen> {
     _shortDescriptionController,
     _fullDescriptionController,
     _coverImageController,
+    _thumbnailController,
     _priceController,
-  ].any((controller) => controller.text.trim().isNotEmpty);
+  ].any((controller) => controller.text.trim().isNotEmpty) ||
+      _openingTime != null ||
+      _closingTime != null ||
+      _fromDate != null ||
+      _toDate != null;
 
   /// يؤكّد المغادرة إن كان في النموذج مدخلات لم تُرسل بعد.
   /// كان الرجوع يمسح نموذجاً طويلاً بضغطة واحدة بلا أي تنبيه.
@@ -318,21 +373,21 @@ class AddPlaceScreenState extends State<AddPlaceScreen> {
                           return null;
                         },
                       ),
-                      const SizedBox(height: 18),
-                      AppFieldLabel(
-                        label: isPartner
-                            ? 'رابط الحجز أو الموقع الإلكتروني'
-                            : 'الموقع الإلكتروني',
-                      ),
-                      TextFormField(
-                        controller: _websiteController,
-                        keyboardType: TextInputType.url,
-                        textDirection: TextDirection.ltr,
-                        decoration: const InputDecoration(
-                          hintText: 'https://',
-                          prefixIcon: Icon(Icons.link_rounded),
+                      // لدى الشريك بطاقة «الحجز» بأسفل الصفحة، وفيها الرابط
+                      // الذي يصبح إجبارياً إذا كان المكان يتطلب حجزاً مسبقاً.
+                      if (!isPartner) ...[
+                        const SizedBox(height: 18),
+                        const AppFieldLabel(label: 'الموقع الإلكتروني'),
+                        TextFormField(
+                          controller: _websiteController,
+                          keyboardType: TextInputType.url,
+                          textDirection: TextDirection.ltr,
+                          decoration: const InputDecoration(
+                            hintText: 'https://',
+                            prefixIcon: Icon(Icons.link_rounded),
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),
@@ -342,9 +397,17 @@ class AddPlaceScreenState extends State<AddPlaceScreen> {
                   const SizedBox(height: 14),
                   _buildCategoryPicker(),
                   const SizedBox(height: 24),
-                  const AppSectionTitle(title: 'الوصف والصورة'),
+                  const AppSectionTitle(title: 'الوصف والصور'),
                   const SizedBox(height: 14),
                   _buildDescriptionCard(),
+                  const SizedBox(height: 24),
+                  const AppSectionTitle(title: 'الأوقات والفترة'),
+                  const SizedBox(height: 14),
+                  _buildWorkingHoursCard(),
+                  const SizedBox(height: 24),
+                  const AppSectionTitle(title: 'الحجز'),
+                  const SizedBox(height: 14),
+                  _buildBookingCard(),
                   const SizedBox(height: 24),
                   const AppSectionTitle(title: 'الدخول'),
                   const SizedBox(height: 14),
@@ -472,7 +535,7 @@ class AddPlaceScreenState extends State<AddPlaceScreen> {
             ),
           ),
           const SizedBox(height: 18),
-          const AppFieldLabel(label: 'رابط صورة الغلاف'),
+          const AppFieldLabel(label: 'رابط صورة الغلاف', required: true),
           TextFormField(
             controller: _coverImageController,
             keyboardType: TextInputType.url,
@@ -481,6 +544,180 @@ class AddPlaceScreenState extends State<AddPlaceScreen> {
               hintText: 'https://...jpg',
               prefixIcon: Icon(Icons.image_rounded),
             ),
+            // صورة واحدة على الأقل تكفي: إن ترك الغلاف فارغاً واكتفى
+            // بالصورة الثانية فلا داعي لمنع النشر.
+            validator: (value) {
+              if (_hasAnyImage) return null;
+              return 'أضف رابط صورة واحدة على الأقل';
+            },
+          ),
+          const SizedBox(height: 18),
+          const AppFieldLabel(label: 'رابط الصورة الثانية'),
+          TextFormField(
+            controller: _thumbnailController,
+            keyboardType: TextInputType.url,
+            textDirection: TextDirection.ltr,
+            decoration: const InputDecoration(
+              hintText: 'https://...jpg',
+              prefixIcon: Icon(Icons.add_photo_alternate_rounded),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// هل أدخل الشريك رابط صورة واحدة على الأقل (الغلاف أو الثانية)؟
+  bool get _hasAnyImage =>
+      _coverImageController.text.trim().isNotEmpty ||
+      _thumbnailController.text.trim().isNotEmpty;
+
+  Widget _buildWorkingHoursCard() {
+    final colors = appColors(context);
+
+    return AppSurfaceCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const AppFieldLabel(label: 'أوقات العمل اليومية'),
+          Row(
+            children: [
+              Expanded(
+                child: _TimePickerField(
+                  label: 'من',
+                  time: _openingTime,
+                  onPick: (time) => setState(() => _openingTime = time),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _TimePickerField(
+                  label: 'إلى',
+                  time: _closingTime,
+                  onPick: (time) => setState(() => _closingTime = time),
+                ),
+              ),
+            ],
+          ),
+          if (_openingTime != null || _closingTime != null) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'تُطبَّق هذه الأوقات على كل أيام الأسبوع.',
+                    style: TextStyle(color: colors.textMuted, fontSize: 12),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: () => setState(() {
+                    _openingTime = null;
+                    _closingTime = null;
+                  }),
+                  icon: const Icon(Icons.close_rounded, size: 16),
+                  label: const Text('مسح'),
+                ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 18),
+          const AppFieldLabel(label: 'فترة الإتاحة (تاريخ البداية والنهاية)'),
+          Row(
+            children: [
+              Expanded(
+                child: _DatePickerField(
+                  label: 'من تاريخ',
+                  date: _fromDate,
+                  onPick: (date) => setState(() => _fromDate = date),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _DatePickerField(
+                  label: 'إلى تاريخ',
+                  date: _toDate,
+                  firstDate: _fromDate,
+                  onPick: (date) => setState(() => _toDate = date),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'اتركها فارغة إن كان المكان متاحاً طوال السنة. بعد تاريخ '
+                  'النهاية يظهر المكان للزوار كمنتهٍ.',
+                  style: TextStyle(
+                    color: colors.textMuted,
+                    fontSize: 12,
+                    height: 1.5,
+                  ),
+                ),
+              ),
+              if (_fromDate != null || _toDate != null)
+                TextButton.icon(
+                  onPressed: () => setState(() {
+                    _fromDate = null;
+                    _toDate = null;
+                  }),
+                  icon: const Icon(Icons.close_rounded, size: 16),
+                  label: const Text('مسح'),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBookingCard() {
+    final colors = appColors(context);
+
+    return AppSurfaceCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SwitchListTile.adaptive(
+            contentPadding: EdgeInsets.zero,
+            value: _requiresBooking,
+            activeThumbColor: colors.accentColor,
+            title: Text(
+              'يتطلب حجزاً مسبقاً',
+              style: TextStyle(
+                color: colors.textPrimary,
+                fontSize: 14.5,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            subtitle: Text(
+              _requiresBooking
+                  ? 'أضف رابط الحجز ليصل إليه الزوار'
+                  : 'الدخول بلا حجز مسبق',
+              style: TextStyle(color: colors.textMuted, fontSize: 12),
+            ),
+            onChanged: (value) => setState(() => _requiresBooking = value),
+          ),
+          const SizedBox(height: 10),
+          AppFieldLabel(
+            label: _requiresBooking ? 'رابط الحجز' : 'الموقع الإلكتروني',
+            required: _requiresBooking,
+          ),
+          TextFormField(
+            controller: _websiteController,
+            keyboardType: TextInputType.url,
+            textDirection: TextDirection.ltr,
+            decoration: const InputDecoration(
+              hintText: 'https://',
+              prefixIcon: Icon(Icons.link_rounded),
+            ),
+            validator: (value) {
+              if (!_requiresBooking) return null;
+              return value == null || value.trim().isEmpty
+                  ? 'أضف رابط الحجز'
+                  : null;
+            },
           ),
         ],
       ),
@@ -653,6 +890,114 @@ class _BecomePartnerCard extends StatelessWidget {
                 size: 24,
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ==========================================
+// حقل اختيار وقت (فتح/إغلاق) بمظهر حقول النموذج
+// ==========================================
+class _TimePickerField extends StatelessWidget {
+  final String label;
+  final TimeOfDay? time;
+  final ValueChanged<TimeOfDay> onPick;
+
+  const _TimePickerField({
+    required this.label,
+    required this.time,
+    required this.onPick,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = appColors(context);
+    final selected = time;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: () async {
+        final picked = await showTimePicker(
+          context: context,
+          initialTime: selected ?? const TimeOfDay(hour: 9, minute: 0),
+        );
+        if (picked != null) onPick(picked);
+      },
+      child: InputDecorator(
+        decoration: InputDecoration(
+          prefixIcon: const Icon(Icons.schedule_rounded),
+          hintText: label,
+        ),
+        child: Text(
+          selected == null
+              ? label
+              : '${selected.hour.toString().padLeft(2, '0')}:'
+                    '${selected.minute.toString().padLeft(2, '0')}',
+          textDirection: TextDirection.ltr,
+          style: TextStyle(
+            color: selected == null ? colors.textMuted : colors.textPrimary,
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ==========================================
+// حقل اختيار تاريخ (بداية/نهاية فترة الإتاحة)
+// ==========================================
+class _DatePickerField extends StatelessWidget {
+  final String label;
+  final DateTime? date;
+
+  /// أقدم تاريخ يُسمح باختياره؛ يُستخدم لمنع نهاية تسبق البداية.
+  final DateTime? firstDate;
+  final ValueChanged<DateTime> onPick;
+
+  const _DatePickerField({
+    required this.label,
+    required this.date,
+    required this.onPick,
+    this.firstDate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = appColors(context);
+    final selected = date;
+    final today = DateTime.now();
+    final earliest = firstDate ?? DateTime(today.year - 1);
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: () async {
+        final picked = await showDatePicker(
+          context: context,
+          initialDate: selected ?? (firstDate ?? today),
+          firstDate: earliest,
+          lastDate: DateTime(today.year + 5, 12, 31),
+        );
+        if (picked != null) onPick(picked);
+      },
+      child: InputDecorator(
+        decoration: InputDecoration(
+          prefixIcon: const Icon(Icons.event_rounded),
+          hintText: label,
+        ),
+        child: Text(
+          selected == null
+              ? label
+              : '${selected.year}/${selected.month.toString().padLeft(2, '0')}'
+                    '/${selected.day.toString().padLeft(2, '0')}',
+          textDirection: TextDirection.ltr,
+          style: TextStyle(
+            color: selected == null ? colors.textMuted : colors.textPrimary,
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
           ),
         ),
       ),

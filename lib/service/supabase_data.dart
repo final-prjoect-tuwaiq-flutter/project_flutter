@@ -257,11 +257,16 @@ class SupabaseData {
     String? shortDescription,
     String? fullDescription,
     String? coverImageUrl,
+    String? thumbnailUrl,
     double? lat,
     double? lng,
     bool isFree = true,
     double? priceMin,
     String? ticketUrl,
+    bool requiresBooking = false,
+    Map<String, dynamic>? times,
+    DateTime? fromDate,
+    DateTime? toDate,
     String? startAt,
     String? endAt,
   }) async {
@@ -273,17 +278,29 @@ class SupabaseData {
       return text == null || text.isEmpty ? null : text;
     }
 
+    String? dateOnly(DateTime? date) => date == null
+        ? null
+        : '${date.year.toString().padLeft(4, '0')}-'
+              '${date.month.toString().padLeft(2, '0')}-'
+              '${date.day.toString().padLeft(2, '0')}';
+
     final placeData = <String, dynamic>{
       'title': title.trim(),
       'm_category': categoryId,
       'short_description': clean(shortDescription),
       'full_description': clean(fullDescription),
       'cover_image_url': clean(coverImageUrl),
+      'thumbnail_url': clean(thumbnailUrl),
       'lat': lat,
       'lng': lng,
       'is_free': isFree,
       'price_min': isFree ? null : priceMin,
       'ticket_url': clean(ticketUrl),
+      'is_registration_required': requiresBooking,
+      'times': times,
+      // تاريخ فقط بلا وقت، فالعمودان يمثّلان فترة إتاحة لا لحظة زمنية.
+      'from_date': dateOnly(fromDate),
+      'to_date': dateOnly(toDate),
       'start_at': clean(startAt),
       'end_at': clean(endAt),
       'created_by': userId,

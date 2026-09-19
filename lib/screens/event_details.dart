@@ -319,21 +319,62 @@ class _HeaderInfoSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (hasCategory) ...[
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: colors.accentColorSoft,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Text(
-              event.sCategory!,
-              style: TextStyle(
-                color: colors.accentColor,
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
+        if (hasCategory || event.isUnavailable) ...[
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              if (hasCategory)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colors.accentColorSoft,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    event.sCategory!,
+                    style: TextStyle(
+                      color: colors.accentColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              // شارة حمراء صريحة: المكان مغلق أو خارج فترة إتاحته.
+              if (event.availabilityLabel != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppTheme.errorColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.do_not_disturb_on_rounded,
+                        size: 14,
+                        color: AppTheme.errorColor,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        event.availabilityLabel!,
+                        style: const TextStyle(
+                          color: AppTheme.errorColor,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
           ),
           const SizedBox(height: 10),
         ],
@@ -460,6 +501,7 @@ class _WorkingHoursSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = appColors(context);
     final workingHours = event.formattedWorkingHoursArabic;
+    final dateRange = event.formattedDateRangeArabic;
     final hasClosedDays = event.closedDays?.isNotEmpty == true;
     final rows = workingHours == null
         ? const <(String?, String)>[]
@@ -474,6 +516,59 @@ class _WorkingHoursSection extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           child: Column(
             children: [
+              // الإغلاق يتصدّر البطاقة: أوقات عمل مكان مغلق تضلّل الزائر.
+              if (event.availabilityNote != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.do_not_disturb_on_rounded,
+                        color: AppTheme.errorColor,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          event.availabilityNote!,
+                          style: const TextStyle(
+                            color: AppTheme.errorColor,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              if (dateRange != null) ...[
+                if (event.availabilityNote != null)
+                  Divider(height: 1, color: colors.borderSoft),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.date_range_rounded,
+                        color: colors.accentColor,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'فترة الإتاحة: $dateRange',
+                          style: TextStyle(
+                            color: colors.textPrimary,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Divider(height: 1, color: colors.borderSoft),
+              ],
               if (rows.isEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 14),
@@ -1303,19 +1398,29 @@ class _BookNowButton extends StatelessWidget {
             ),
             const SizedBox(width: 18),
             Expanded(
-              child: AppGradientButton(
-                // زر يفتح حواراً بالخطأ في كل مرة ليس زراً؛ يُعطَّل بعنوان
-                // صريح حين لا يوجد رابط حجز ولا إحداثيات للمكان.
-                label: _hasTicketUrl
-                    ? 'احجز الآن'
-                    : (hasAction ? 'افتح الموقع' : 'لا يوجد رابط'),
-                icon: _hasTicketUrl
-                    ? Icons.arrow_forward_rounded
-                    : (hasAction
-                          ? Icons.location_on_rounded
-                          : Icons.link_off_rounded),
-                onPressed: hasAction ? () => _launchAction(context) : null,
-              ),
+              // المكان المغلق لا يُحجز: الزر يُعطَّل ويعلن الحالة بدل أن
+              // يرسل الزائر إلى صفحة حجز لا تعمل.
+              child: event.isUnavailable
+                  ? AppGradientButton(
+                      label: event.availabilityLabel!,
+                      icon: Icons.do_not_disturb_on_rounded,
+                      onPressed: null,
+                    )
+                  : AppGradientButton(
+                      // زر يفتح حواراً بالخطأ في كل مرة ليس زراً؛ يُعطَّل بعنوان
+                      // صريح حين لا يوجد رابط حجز ولا إحداثيات للمكان.
+                      label: _hasTicketUrl
+                          ? 'احجز الآن'
+                          : (hasAction ? 'افتح الموقع' : 'لا يوجد رابط'),
+                      icon: _hasTicketUrl
+                          ? Icons.arrow_forward_rounded
+                          : (hasAction
+                                ? Icons.location_on_rounded
+                                : Icons.link_off_rounded),
+                      onPressed: hasAction
+                          ? () => _launchAction(context)
+                          : null,
+                    ),
             ),
           ],
         ),

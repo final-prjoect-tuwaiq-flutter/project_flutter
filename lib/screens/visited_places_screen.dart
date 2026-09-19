@@ -404,6 +404,30 @@ class _VisitedCard extends StatelessWidget {
                                     ),
                                     const SizedBox(height: 3),
                                     _VisitSummary(place: place),
+                                    // مكان زاره المستخدم ثم أُغلق: تُذكر
+                                    // الحالة هنا حتى لا يقصده مرة أخرى.
+                                    if (event.availabilityLabel != null) ...[
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(
+                                            Icons.do_not_disturb_on_rounded,
+                                            size: 13,
+                                            color: AppTheme.errorColor,
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            event.availabilityLabel!,
+                                            style: const TextStyle(
+                                              color: AppTheme.errorColor,
+                                              fontSize: 11.5,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
                                   ],
                                 ),
                               ),
