@@ -121,7 +121,7 @@ class _SignUpPageState extends State<SignUpPage> {
     final colors = appColors(context);
 
     return AuthLayout(
-      title: 'أنشئ حسابك في المعزب',
+      title: 'أنشئ حسابك في مدهال',
       subtitle: 'سجل الآن وابدأ تجربتك الممتعة!',
       child: Form(
         key: _controller.formKey,

@@ -139,7 +139,7 @@ class _LoginPageState extends State<LoginPage> {
     final colors = appColors(context);
 
     return AuthLayout(
-      title: 'حيّاك في المعزب',
+      title: 'حيّاك في مدهال',
       subtitle: 'سجل دخولك وتابع أماكنك المفضلة',
       child: Form(
         key: _controller.formKey,

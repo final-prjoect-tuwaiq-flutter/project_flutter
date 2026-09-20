@@ -216,7 +216,7 @@ class _AccountScreenState extends State<AccountScreen> {
                   const SizedBox(height: 28),
                   Center(
                     child: Text(
-                      'المعزب · دليلك للأماكن والفعاليات',
+                      'مدهال · دليلك للأماكن والفعاليات',
                       style: TextStyle(
                         color: colors.textMuted.withValues(alpha: 0.7),
                         fontSize: 11.5,

@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:project_flutter/theme/theme.dart';
 import 'package:project_flutter/widgets/app_ui.dart';
 
-/// شاشة البداية: ترحيب "المعزب" بضيفه قبل الدخول للتطبيق.
+/// شاشة البداية: ترحيب "مدهال" بضيفه قبل الدخول للتطبيق.
 class SplashScreen extends StatefulWidget {
   final WidgetBuilder nextBuilder;
 
@@ -323,7 +323,10 @@ class _SplashScreenState extends State<SplashScreen>
                       ],
                     ).createShader(rect);
                   },
-                  child: const AppBrandMark(size: logoSize),
+                  child: const AppBrandMark(
+                    size: logoSize,
+                    onDarkSurface: true,
+                  ),
                 ),
               ),
             ),

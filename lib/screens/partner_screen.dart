@@ -153,7 +153,7 @@ class _PartnerScreenState extends State<PartnerScreen> {
       return AppStatePanel(
         icon: Icons.lock_person_rounded,
         title: 'سجّل الدخول أولاً',
-        subtitle: 'حساب الشريك مرتبط بحسابك في المعزب.',
+        subtitle: 'حساب الشريك مرتبط بحسابك في مدهال.',
         actionLabel: 'تسجيل الدخول',
         actionIcon: Icons.login_rounded,
         onAction: () async {
@@ -518,7 +518,7 @@ class _PartnerBenefits extends StatelessWidget {
       (
         Icons.verified_rounded,
         'شارة موثّقة',
-        'يظهر حسابك كشريك معتمد في المعزب',
+        'يظهر حسابك كشريك معتمد في مدهال',
       ),
     ];
     final colors = appColors(context);

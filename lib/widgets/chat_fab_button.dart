@@ -23,7 +23,7 @@ class ChatFabButton extends StatelessWidget {
       bottom: bottom,
       right: 18,
       child: Tooltip(
-        message: 'مرشد المعزب',
+        message: 'مرشد مدهال',
         child: GestureDetector(
           onTap: () {
             Navigator.push(
