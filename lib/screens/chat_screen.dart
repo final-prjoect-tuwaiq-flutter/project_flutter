@@ -18,7 +18,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final ChatUser _me = ChatUser(id: '1', firstName: 'أنت');
   final ChatUser _bot = ChatUser(
     id: '2',
-    firstName: 'مرشد المعزب',
+    firstName: 'مرشد مدهال',
     profileImage: null,
   );
 
@@ -52,7 +52,7 @@ class _ChatScreenState extends State<ChatScreen> {
               user: _bot,
               createdAt: DateTime.now(),
               text:
-                  'أهلاً بك! 👋 أنا مرشدك في "المعزب".\n'
+                  'أهلاً بك! 👋 أنا مرشدك في "مدهال".\n'
                   'أخبرني عن ميزانيتك ونوع الأماكن التي تحبها، وسأساعدك في اختيار المكان الأنسب لك.',
             ),
           );
@@ -443,7 +443,7 @@ class _ChatHeader extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'مرشد المعزب',
+                            'مرشد مدهال',
                             style: AppTheme.display(
                               18,
                               color: Colors.white,

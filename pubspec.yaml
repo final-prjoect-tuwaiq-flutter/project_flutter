@@ -74,7 +74,7 @@ flutter:
         - asset: assets/fonts/thmanyahserifdisplay-Black.otf
           weight: 900
 
-# أيقونة التطبيق مولّدة من شعار "المعزب" الرسمي.
+# أيقونة التطبيق مولّدة من شعار "مدهال" الرسمي.
 flutter_launcher_icons:
   image_path: assets/images/app_logo.png
   android: true
@@ -82,5 +82,6 @@ flutter_launcher_icons:
   remove_alpha_ios: true
   web:
     generate: true
-  adaptive_icon_background: "#FAF3E5"
-  adaptive_icon_foreground: assets/images/app_logo.png
+  adaptive_icon_background: "#FBF3E2"
+  # نسخة المنطقة الآمنة: الشعار مصغّر داخل الإطار كي لا يقتصّه قناع أندرويد.
+  adaptive_icon_foreground: assets/images/app_logo_adaptive_foreground.png

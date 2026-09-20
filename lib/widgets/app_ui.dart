@@ -10,8 +10,22 @@ AppCustomColors appColors(BuildContext context) =>
 class AppAssets {
   const AppAssets._();
 
-  /// شعار "المعزب" الرسمي.
+  /// شعار "مدهال" الرسمي — نسخة الخلفية الفاتحة.
   static const String logo = 'assets/images/app_logo.png';
+
+  /// نسخة الشعار للخلفيات الداكنة.
+  static const String logoDark = 'assets/images/app_logo_dark.png';
+
+  /// الشعار الكامل مع الاسم والشعار النصي (فاتح/داكن).
+  static const String lockup = 'assets/images/app_lockup.png';
+  static const String lockupDark = 'assets/images/app_lockup_dark.png';
+
+  /// يختار نسخة الشعار المناسبة لسطوع الواجهة الحالية.
+  static String logoFor(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark ? logoDark : logo;
+
+  static String lockupFor(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark ? lockupDark : lockup;
 }
 
 // ==========================================
@@ -23,11 +37,23 @@ class AppBrandMark extends StatelessWidget {
   /// يُطفأ الظل الذهبي عندما يوضع الشعار فوق سطح فاتح.
   final bool withGlow;
 
-  const AppBrandMark({super.key, this.size = 46, this.withGlow = true});
+  /// يفرض نسخة الشعار الداكنة بغضّ النظر عن سطوع الثيم — لازم على الأسطح
+  /// التي تبقى ليلية دائماً كشاشة البداية.
+  final bool? onDarkSurface;
+
+  const AppBrandMark({
+    super.key,
+    this.size = 46,
+    this.withGlow = true,
+    this.onDarkSurface,
+  });
 
   @override
   Widget build(BuildContext context) {
     final colors = appColors(context);
+    final asset = onDarkSurface == null
+        ? AppAssets.logoFor(context)
+        : (onDarkSurface! ? AppAssets.logoDark : AppAssets.logo);
     final radius = BorderRadius.circular(size * 0.22);
 
     return Container(
@@ -48,7 +74,7 @@ class AppBrandMark extends StatelessWidget {
       child: ClipRRect(
         borderRadius: radius,
         child: Image.asset(
-          AppAssets.logo,
+          asset,
           width: size,
           height: size,
           fit: BoxFit.cover,
